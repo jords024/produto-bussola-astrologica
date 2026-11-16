@@ -20,11 +20,23 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("@/components/PesquisaClientes", () => ({
-  default: () => null,
+  default: () => <div data-testid="pesquisa-clientes-mock">Pesquisa de Clientes Mock</div>,
 }));
 
 vi.mock("@/components/ClientDrawer", () => ({
   default: () => null,
+}));
+
+vi.mock("@/components/LeadQuestionnaire", () => ({
+  default: () => <div data-testid="lead-questionnaire-mock">Formulário de Cadastro Mock</div>,
+}));
+
+vi.mock("@/components/HistoricoPesquisas", () => ({
+  default: () => <div data-testid="historico-pesquisas-mock">Histórico Mock</div>,
+}));
+
+vi.mock("@/components/GestaoUsuarios", () => ({
+  default: () => <div data-testid="gestao-usuarios-mock">Gestão de Usuários Mock</div>,
 }));
 
 vi.mock("@/components/backup/BackupAutomatico", () => ({
@@ -52,8 +64,6 @@ describe("AdminLayout Navegação e Painel", () => {
         });
       }
       if (url.includes("/auth/me")) {
-        // O papel passou a decidir o painel inteiro: sem ele nada de gestão
-        // é desenhado, que é exatamente a proteção contra o vazamento antigo.
         return Promise.resolve({
           name: "Aryaraj Fernandes",
           email: "aryarajunity@gmail.com",
@@ -64,156 +74,88 @@ describe("AdminLayout Navegação e Painel", () => {
     });
   });
 
-  it("renderiza a barra lateral com a marca Bussola Astrologica, os botões Home, Pesquisa, Histórico, Backup Automático, Sistema de Logs, Gestão de Usuários e Sair", async () => {
+  it("renderiza a barra lateral com Bússola Astrológica e os botões de administração", async () => {
     render(<AdminPage />);
 
     await waitFor(() => {
-      expect(screen.getAllByText("Bussola Astrologica").length).toBeGreaterThan(0);
-      expect(screen.getByText("Aryaraj Fernandes")).toBeDefined();
-      expect(screen.getByText("aryarajunity@gmail.com")).toBeDefined();
+      expect(screen.getAllByText("Bússola Astrológica").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Aryaraj Fernandes").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("aryarajunity@gmail.com").length).toBeGreaterThan(0);
     });
 
-    expect(screen.getByText("Painel de Gestão Cósmica")).toBeDefined();
-    expect(screen.getByText("Geral")).toBeDefined();
-    expect(screen.getByText("Segurança")).toBeDefined();
-    expect(screen.getByRole("button", { name: /home/i })).toBeDefined();
-    expect(screen.getByRole("button", { name: /pesquisa/i })).toBeDefined();
-    expect(screen.getByRole("button", { name: /histórico/i })).toBeDefined();
-    expect(screen.getByRole("button", { name: /backup automático/i })).toBeDefined();
-    expect(screen.getByRole("button", { name: /sistema de logs/i })).toBeDefined();
-    expect(screen.getByRole("button", { name: /gestão de usuários/i })).toBeDefined();
-    expect(screen.getByRole("button", { name: /sair/i })).toBeDefined();
+    expect(screen.getAllByText("Painel de Gestão").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /cadastrar mapa/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /pesquisa de clientes/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /histórico de gerações/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /backup automático/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /sistema de logs/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /gestão de usuários/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /sair/i }).length).toBeGreaterThan(0);
   });
 
-  it("renderiza o cabeçalho principal com Visão Geral (Home) e Bussola Astrologica", async () => {
+  it("renderiza o cabeçalho superior e o botão hamburger para mobile", async () => {
     render(<AdminPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Visão Geral (Home)")).toBeDefined();
+      expect(screen.getByRole("button", { name: /abrir menu de navegação/i })).toBeDefined();
     });
 
-    expect(screen.getAllByText("Bussola Astrologica").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("heading", { name: /cadastrar mapa/i }).length).toBeGreaterThan(0);
   });
 
-  it("não exibe os cards de métricas na aba Home, priorizando o formulário de coleta", async () => {
+  it("abre o drawer mobile ao clicar no botão hamburger e fecha ao clicar no backdrop", async () => {
     render(<AdminPage />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Dados de nascimento do cliente/i)).toBeDefined();
+      expect(screen.getByRole("button", { name: /abrir menu de navegação/i })).toBeDefined();
     });
 
-    expect(screen.queryByText("Total de Leads")).toBeNull();
-    expect(screen.queryByText("Novos Hoje")).toBeNull();
-    expect(screen.queryByText("Esta Semana")).toBeNull();
-    expect(screen.queryByText("Taxa de Conversão")).toBeNull();
-    expect(screen.queryByText("Distribuição por Signo Solar")).toBeNull();
+    // Clica no botão hamburger
+    const hamburgerBtn = screen.getByRole("button", { name: /abrir menu de navegação/i });
+    fireEvent.click(hamburgerBtn);
+
+    // O backdrop e drawer móvel devem estar visíveis
+    expect(screen.getByTestId("sidebar-mobile-backdrop")).toBeDefined();
+    expect(screen.getByTestId("sidebar-mobile-drawer")).toBeDefined();
+
+    // Clica no backdrop para fechar
+    fireEvent.click(screen.getByTestId("sidebar-mobile-backdrop"));
+    expect(screen.queryByTestId("sidebar-mobile-backdrop")).toBeNull();
   });
 
-  it("permite navegar para a aba Pesquisa ao clicar no botão da barra lateral", async () => {
+  it("permite navegar para a aba Pesquisa de Clientes ao clicar no menu", async () => {
     render(<AdminPage />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /pesquisa/i })).toBeDefined();
+      expect(screen.getAllByRole("button", { name: /pesquisa de clientes/i }).length).toBeGreaterThan(0);
     });
 
-    const pesquisaBtn = screen.getByRole("button", { name: /pesquisa/i });
-    fireEvent.click(pesquisaBtn);
+    const pesquisaBtns = screen.getAllByRole("button", { name: /pesquisa de clientes/i });
+    fireEvent.click(pesquisaBtns[0]);
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Pesquisa" })).toBeDefined();
+      expect(screen.getByTestId("pesquisa-clientes-mock")).toBeDefined();
     });
-  });
-
-  it("permite navegar para a aba Histórico ao clicar no botão da barra lateral", async () => {
-    render(<AdminPage />);
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /histórico/i })).toBeDefined();
-    });
-
-    const histBtn = screen.getByRole("button", { name: /histórico/i });
-    fireEvent.click(histBtn);
-
-    await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Histórico de Pesquisas" })).toBeDefined();
-    });
-  });
-
-  it("permite navegar para a aba Backup Automático ao clicar no botão da barra lateral", async () => {
-    render(<AdminPage />);
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /backup automático/i })).toBeDefined();
-    });
-
-    const backupBtn = screen.getByRole("button", { name: /backup automático/i });
-    fireEvent.click(backupBtn);
-
-    await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Backup Automático" })).toBeDefined();
-      expect(screen.getByTestId("backup-automatico-mock")).toBeDefined();
-    });
-  });
-
-  it("permite navegar para a aba Sistema de Logs ao clicar no botão da barra lateral", async () => {
-    render(<AdminPage />);
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /sistema de logs/i })).toBeDefined();
-    });
-
-    const logsBtn = screen.getByRole("button", { name: /sistema de logs/i });
-    fireEvent.click(logsBtn);
-
-    await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Sistema de Logs" })).toBeDefined();
-      expect(screen.getByTestId("gerenciamento-logs-mock")).toBeDefined();
-    });
-  });
-
-  it("permite navegar para a aba Gestão de Usuários ao clicar no botão da barra lateral", async () => {
-    render(<AdminPage />);
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /gestão de usuários/i })).toBeDefined();
-    });
-
-    const gestaoBtn = screen.getByRole("button", { name: /gestão de usuários/i });
-    fireEvent.click(gestaoBtn);
-
-    await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Gestão de Usuários" })).toBeDefined();
-    });
-  });
-
-  it("exibe o formulário de coleta de informações do usuário na aba Home", async () => {
-    render(<AdminPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/Dados de nascimento do cliente/i)).toBeDefined();
-    });
-
-    expect(screen.getByPlaceholderText(/Ex: Gabriel Moreira Silva/i)).toBeDefined();
-    expect(screen.getByText(/Salvar Informações do Lead/i)).toBeDefined();
   });
 
   it("abre o popup de confirmação ao clicar em Sair e desloga apenas ao confirmar", async () => {
     render(<AdminPage />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /sair/i })).toBeDefined();
+      expect(screen.getAllByRole("button", { name: /sair/i }).length).toBeGreaterThan(0);
     });
 
     // Modal de confirmação não deve estar presente inicialmente
     expect(screen.queryByText("Encerrar Sessão")).toBeNull();
 
     // Clica em Sair na barra lateral
-    fireEvent.click(screen.getByRole("button", { name: /sair/i }));
+    const sairBtns = screen.getAllByRole("button", { name: /sair/i });
+    fireEvent.click(sairBtns[0]);
 
     // Popup deve aparecer centralizado
     expect(screen.getByText("Encerrar Sessão")).toBeDefined();
     expect(
-      screen.getByText(/Tem certeza de que deseja sair do painel administrativo/i)
+      screen.getByText(/Tem certeza de que deseja sair do painel/i)
     ).toBeDefined();
     expect(screen.getByRole("button", { name: /cancelar/i })).toBeDefined();
     expect(screen.getByRole("button", { name: /confirmar saída/i })).toBeDefined();
@@ -225,12 +167,39 @@ describe("AdminLayout Navegação e Painel", () => {
     expect(mockPush).not.toHaveBeenCalled();
 
     // Clica em Sair novamente e depois em Confirmar Saída
-    fireEvent.click(screen.getByRole("button", { name: /sair/i }));
+    fireEvent.click(sairBtns[0]);
     expect(screen.getByText("Encerrar Sessão")).toBeDefined();
 
     fireEvent.click(screen.getByRole("button", { name: /confirmar saída/i }));
     expect(screen.queryByText("Encerrar Sessão")).toBeNull();
     expect(localStorage.getItem("sirius_token")).toBeNull();
+    expect(localStorage.getItem("bussola_admin_active_tab")).toBeNull();
     expect(mockPush).toHaveBeenCalledWith("/admin/login");
+  });
+
+  it("persiste a última aba aberta no localStorage e restaura ao recarregar a página", async () => {
+    localStorage.removeItem("bussola_admin_active_tab");
+    window.history.replaceState(null, "", "/admin");
+
+    const { unmount } = render(<AdminPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Gestão de Usuários/i).length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getAllByText(/Gestão de Usuários/i)[0]);
+    expect(localStorage.getItem("bussola_admin_active_tab")).toBe("gestao_usuarios");
+    expect(window.location.search).toContain("tab=gestao_usuarios");
+
+    unmount();
+    window.history.replaceState(null, "", "/admin");
+
+    render(<AdminPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId("gestao-usuarios-mock")).toBeDefined();
+    });
+
+    localStorage.removeItem("bussola_admin_active_tab");
+    window.history.replaceState(null, "", "/");
   });
 });

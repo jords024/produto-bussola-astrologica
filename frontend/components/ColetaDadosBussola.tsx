@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import CityAutocomplete from "@/components/CityAutocomplete";
+import BrazilStateSelect from "@/components/BrazilStateSelect";
 import { CityOption, BRAZIL_STATES, COUNTRIES } from "@/lib/locationConstants";
 
 interface ColetaDadosBussolaProps {
@@ -19,6 +20,21 @@ const FOCUS_OPTIONS = [
   { id: "relacionamentos", rotulo: "Relacionamentos", desc: "Parcerias estratégicas, vínculos afetivos e acordos" },
   { id: "autoconhecimento", rotulo: "Autoconhecimento", desc: "Alinhamento interno, vitalidade e autodomínio" },
 ];
+
+function resolveBrazilUf(rawState?: string | null): string {
+  if (!rawState) return "";
+  const norm = rawState
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const found = BRAZIL_STATES.find(
+    (s) =>
+      s.uf.toLowerCase() === norm ||
+      s.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === norm
+  );
+  return found ? found.uf : rawState.trim();
+}
 
 export default function ColetaDadosBussola({
   onSuccess,
@@ -58,7 +74,7 @@ export default function ColetaDadosBussola({
             }
           }
           if (dados.birth_city) setCidade(dados.birth_city);
-          if (dados.birth_state) setEstado(dados.birth_state);
+          if (dados.birth_state) setEstado(resolveBrazilUf(dados.birth_state));
           if (dados.birth_country) setPais(dados.birth_country);
           if (dados.focus_areas && dados.focus_areas.length > 0) {
             setFoco(dados.focus_areas[0]);
@@ -77,7 +93,9 @@ export default function ColetaDadosBussola({
 
   const handleSelectCity = (opt: CityOption) => {
     setCidade(opt.city);
-    setEstado(opt.state || "");
+    if (opt.state) {
+      setEstado(resolveBrazilUf(opt.state));
+    }
     if (opt.country) setPais(opt.country);
     setCoords({ lat: opt.lat, lng: opt.lng });
   };
@@ -153,9 +171,11 @@ export default function ColetaDadosBussola({
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto bg-[#0f0f13] border border-white/[0.09] rounded-2xl p-6 sm:p-8 shadow-[0_30px_70px_-10px_rgba(0,0,0,0.85)] relative overflow-hidden backdrop-blur-sm">
+    <div className="w-full max-w-2xl mx-auto bg-[#0f0f13] border border-white/[0.09] rounded-2xl p-6 sm:p-8 shadow-[0_30px_70px_-10px_rgba(0,0,0,0.85)] relative backdrop-blur-sm">
       {/* Luz ambiente dourada suave no topo */}
-      <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-48 bg-[#d4af37]/[0.08] blur-3xl pointer-events-none rounded-full" />
+      <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+        <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-48 bg-[#d4af37]/[0.08] blur-3xl rounded-full" />
+      </div>
       {/* Filete de iluminação dourado na borda superior */}
       <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-[#d4af37]/50 to-transparent" />
 
@@ -304,27 +324,14 @@ export default function ColetaDadosBussola({
             {isBrazil && (
               <div className="sm:col-span-3">
                 <label className="block text-[11px] text-zinc-400 mb-1">Estado</label>
-                <div className="relative">
-                  <select
-                    value={estado}
-                    onChange={(e) => {
-                      setEstado(e.target.value);
-                      setCidade("");
-                      setCoords(null);
-                    }}
-                    className="w-full h-11 bg-[#141418] border border-white/10 rounded-xl px-3 pr-7 text-xs text-zinc-100 focus:outline-none focus:border-[#d4af37]/70 focus:ring-1 focus:ring-[#d4af37]/30 transition-all appearance-none cursor-pointer"
-                  >
-                    <option value="">UF</option>
-                    {BRAZIL_STATES.map((st) => (
-                      <option key={st.uf} value={st.uf} className="bg-zinc-900 text-zinc-200">
-                        {st.uf} - {st.name}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-zinc-500 text-[10px]">
-                    ▼
-                  </div>
-                </div>
+                <BrazilStateSelect
+                  value={estado}
+                  onChange={(uf) => {
+                    setEstado(uf);
+                    setCidade("");
+                    setCoords(null);
+                  }}
+                />
               </div>
             )}
 

@@ -12,12 +12,39 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("@/components/CityAutocomplete", () => ({
-  default: ({ onChangeCity }: { onChangeCity: (val: string) => void }) => (
-    <input
-      data-testid="city-input"
-      placeholder="Cidade"
-      onChange={(e) => onChangeCity(e.target.value)}
-    />
+  default: ({
+    onChangeCity,
+    onSelectCity,
+  }: {
+    onChangeCity: (val: string) => void;
+    onSelectCity: (opt: any) => void;
+  }) => (
+    <div>
+      <input
+        data-testid="city-input"
+        placeholder="Cidade"
+        onChange={(e) => onChangeCity(e.target.value)}
+      />
+      <button
+        type="button"
+        data-testid="mock-select-city-btn"
+        onClick={() =>
+          onSelectCity({
+            display: "Governador Archer, Maranhão, Brasil",
+            flag: "🇧🇷",
+            city: "Governador Archer",
+            state: "Maranhão",
+            country: "Brasil",
+            country_code: "BR",
+            lat: -5.0222,
+            lng: -44.2711,
+            tz_str: "America/Fortaleza",
+          })
+        }
+      >
+        Selecionar Cidade
+      </button>
+    </div>
   ),
 }));
 
@@ -76,5 +103,18 @@ describe("ColetaDadosBussola", () => {
         })
       );
     });
+  });
+
+  it("converte o nome completo do estado retornado pela cidade (ex: Maranhão) para a UF correspondente (MA)", async () => {
+    render(<ColetaDadosBussola />);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("João Silva")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId("mock-select-city-btn"));
+
+    const stateBtn = screen.getByTestId("state-select-button");
+    expect(stateBtn.textContent).toContain("MA - Maranhão");
   });
 });

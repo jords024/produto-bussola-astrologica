@@ -1,0 +1,162 @@
+version: "3.7"
+
+# ==============================================================================
+# Stack de Produção - Bússola Astrológica (Docker Swarm + Traefik)
+# ==============================================================================
+# Observações:
+# 1. O banco de dados PostgreSQL é externo (já existente na infraestrutura / Swarm).
+# 2. Todas as variáveis de ambiente estão declaradas explicitamente em cada serviço.
+# 3. Rede pública existente: network_swarm_public (comunica com o Traefik).
+# 4. Rede interna overlay: bussola_app_internal (comunicação privada entre serviços).
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Serviço de Backend (FastAPI + Python 3.11 + Uvicorn)
+  # ----------------------------------------------------------------------------
+  bussola_app_backend:
+    image: ${BACKEND_IMAGE:-aryalvesfernandes/bussola-app:backend-1.0.5}
+    hostname: "{{.Service.Name}}.{{.Task.Slot}}"
+    volumes:
+      - bussola_app_uploads:/app/uploads
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      network_swarm_public:
+        aliases:
+          - bussola_app_backend
+      bussola_app_internal:
+        aliases:
+          - bussola_app_backend
+    environment:
+      #########################################################
+      # Configurações Gerais da Aplicação #####################
+      #########################################################
+      - TZ=America/Sao_Paulo
+      - PROJECT_NAME=Bússola Astrológica
+      - DASHBOARD_URL=${DASHBOARD_URL:-https://${FRONTEND_DOMAIN:-bussola.seudominio.com}}
+      - FRONTEND_DOMAIN=${FRONTEND_DOMAIN:-bussola.seudominio.com}
+      - API_DOMAIN=${API_DOMAIN:-api-bussola.seudominio.com}
+
+      #########################################################
+      # Configuração do Banco de Dados (PostgreSQL Externo) ##
+      #########################################################
+      - DATABASE_URL=${DATABASE_URL}
+
+      #########################################################
+      # Configurações de Segurança e Autenticação (JWT) #######
+      #########################################################
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRE_HOURS=${JWT_EXPIRE_HOURS:-168}
+
+      #########################################################
+      # Chave de Integração Externa (Webhooks / Convites) #####
+      #########################################################
+      - EXTERNAL_API_KEY=${EXTERNAL_API_KEY}
+
+      #########################################################
+      # Credenciais Iniciais do Super Administrador ##########
+      #########################################################
+      - SUPER_ADMIN_NAME=${SUPER_ADMIN_NAME:-Aryaraj}
+      - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL:-admin@bussola.com}
+      - SUPER_ADMIN_PASSWORD=${SUPER_ADMIN_PASSWORD}
+
+      #########################################################
+      # Inteligência Artificial (OpenAI) ######################
+      #########################################################
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      #########################################################
+      # Envio de E-mails Transacionais e OTP (Brevo API) ######
+      #########################################################
+      - BREVO_API_KEY=${BREVO_API_KEY:-}
+      - BREVO_SENDER_NAME=${BREVO_SENDER_NAME:-Bússola Astrológica}
+      - BREVO_SENDER_EMAIL=${BREVO_SENDER_EMAIL:-contato@bussolaastrologica.com.br}
+
+      #########################################################
+      # E-mails Alternativos (Resend - Opcional) #############
+      #########################################################
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - RESEND_FROM=${RESEND_FROM:-}
+
+      #########################################################
+      # Armazenamento em Nuvem / Backups (Backblaze B2 / S3) ##
+      #########################################################
+      - BACKBLAZE_ENDPOINT_URL=${BACKBLAZE_ENDPOINT_URL:-https://s3.us-west-004.backblazeb2.com}
+      - BACKBLAZE_KEY_ID=${BACKBLAZE_KEY_ID:-}
+      - BACKBLAZE_APPLICATION_KEY=${BACKBLAZE_APPLICATION_KEY:-}
+      - BACKBLAZE_BUCKET_NAME=${BACKBLAZE_BUCKET_NAME:-bussola-backups}
+      - BACKBLAZE_CDN_URL=${BACKBLAZE_CDN_URL:-}
+      - B2_FOLDER=${B2_FOLDER:-BussolaAstrologica/backups/}
+      - B2_RETENTION_MAX=${B2_RETENTION_MAX:-30}
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 2048M
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.bussola_backend.rule=Host(`${API_DOMAIN:-api-bussola.seudominio.com}`)
+        - traefik.http.routers.bussola_backend.entrypoints=websecure
+        - traefik.http.routers.bussola_backend.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.bussola_backend.service=bussola_backend
+        - traefik.http.services.bussola_backend.loadbalancer.server.port=8000
+        - traefik.http.services.bussola_backend.loadbalancer.passHostHeader=true
+
+  # ----------------------------------------------------------------------------
+  # 2. Serviço de Frontend (Next.js Standalone / Nginx Produção)
+  # ----------------------------------------------------------------------------
+  bussola_app_frontend:
+    image: ${FRONTEND_IMAGE:-aryalvesfernandes/bussola-app:frontend-1.0.5}
+    hostname: "{{.Service.Name}}.{{.Task.Slot}}"
+    networks:
+      - network_swarm_public
+      - bussola_app_internal
+    environment:
+      - TZ=America/Sao_Paulo
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://${API_DOMAIN:-api-bussola.seudominio.com}}
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1024M
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.bussola_frontend.rule=Host(`${FRONTEND_DOMAIN:-bussola.seudominio.com}`)
+        - traefik.http.routers.bussola_frontend.entrypoints=websecure
+        - traefik.http.routers.bussola_frontend.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.bussola_frontend.service=bussola_frontend
+        - traefik.http.services.bussola_frontend.loadbalancer.server.port=3000
+        - traefik.http.services.bussola_frontend.loadbalancer.passHostHeader=true
+
+# ==============================================================================
+# Definição Global dos Volumes da Bússola Astrológica
+# ==============================================================================
+volumes:
+  # Volume para arquivos e assets persistentes do backend
+  bussola_app_uploads:
+    external: false
+    name: bussola_app_uploads
+
+# ==============================================================================
+# Definição Global das Redes Swarm
+# ==============================================================================
+networks:
+  # Rede pública externa gerenciada pelo Swarm para comunicação com Traefik
+  network_swarm_public:
+    external: true
+    name: network_swarm_public
+
+  # Rede interna privada para tráfego direto entre os serviços da Bússola Astrológica
+  bussola_app_internal:
+    driver: overlay
+    attachable: true

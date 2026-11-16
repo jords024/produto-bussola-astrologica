@@ -44,7 +44,7 @@ describe("CountryPhoneInput Component", () => {
     const input = screen.getByTestId("input-whatsapp");
     fireEvent.change(input, { target: { value: "85988146141" } });
 
-    expect(handleChange).toHaveBeenCalledWith("+55 85988146141");
+    expect(handleChange).toHaveBeenCalledWith("+5585988146141");
   });
 
   it("filtra países ao digitar no campo de busca do dropdown", () => {

@@ -67,7 +67,7 @@ def get_client_detail_polymorphic(client_id: str, db: Session) -> Optional[Dict[
             openai_cost = chart.chart_data["openai_cost"]
         else:
             g_log = db.query(GenerationLog).filter(
-                (GenerationLog.client_id == str(user.id)) | (GenerationLog.email == user.email)
+                GenerationLog.email == user.email
             ).order_by(GenerationLog.created_at.desc()).first()
             if g_log and g_log.cost_usd:
                 openai_cost = {

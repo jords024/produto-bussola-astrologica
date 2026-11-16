@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { toast } from "@/components/Toast";
 import GerarConviteModal from "@/components/GerarConviteModal";
+import CriarUsuarioModal from "@/components/CriarUsuarioModal";
 import ListaConvites from "@/components/ListaConvites";
 import EditarUsuarioModal, { UserToEdit } from "@/components/EditarUsuarioModal";
 import ConfirmDeleteModal from "@/components/ConfirmDeleteModal";
@@ -31,6 +32,7 @@ export default function GestaoUsuarios() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserToEdit | null>(null);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -206,20 +208,27 @@ export default function GestaoUsuarios() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={() => setShowInviteModal(true)}
+            onClick={() => setShowCreateUserModal(true)}
             data-testid="open-create-user-modal-btn"
             className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer shadow-lg hover:brightness-110 active:scale-95"
-            style={{
-              background: "linear-gradient(135deg, #7F77DD, #534ab3)",
-              color: "#ffffff",
-              boxShadow: "0 0 15px rgba(127, 119, 221, 0.3)",
-            }}
+            style={{ background: "linear-gradient(135deg, #7F77DD, #534ab3)", color: "#ffffff", boxShadow: "0 0 15px rgba(127, 119, 221, 0.3)" }}
           >
             <span>+</span>
             <span>Criar Usuário</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowInviteModal(true)}
+            data-testid="open-generate-invite-modal-btn"
+            className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer shadow-md hover:brightness-110 active:scale-95"
+            style={{ background: "linear-gradient(135deg, rgba(236, 72, 153, 0.22), rgba(127, 119, 221, 0.28))", color: "#f0eeff", border: "1px solid rgba(236, 72, 153, 0.4)" }}
+          >
+            <span>🎟️</span>
+            <span>Gerar Convite</span>
           </button>
 
           <button
@@ -446,12 +455,7 @@ export default function GestaoUsuarios() {
       />
 
       {/* Modal de Edição de Usuário */}
-      <EditarUsuarioModal
-        isOpen={!!editingUser}
-        user={editingUser}
-        onClose={() => setEditingUser(null)}
-        onUserUpdated={fetchUsers}
-      />
+      <EditarUsuarioModal isOpen={!!editingUser} user={editingUser} onClose={() => setEditingUser(null)} onUserUpdated={fetchUsers} />
 
       {/* Modal de Exibição do Link Seguro de Redefinição de Senha */}
       <RedefinirSenhaModal
@@ -461,6 +465,9 @@ export default function GestaoUsuarios() {
         resetUrl={resetModalData?.resetUrl || ""}
         onClose={() => setResetModalData(null)}
       />
+
+      {/* Modal de Criação Manual de Usuário */}
+      <CriarUsuarioModal isOpen={showCreateUserModal} onClose={() => setShowCreateUserModal(false)} onUserCreated={fetchUsers} />
 
       {/* Modal de Exclusão Individual de Usuário */}
       <ConfirmDeleteModal

@@ -4,167 +4,13 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { api, saveToken, getBaseUrl } from "@/lib/api";
 
-const C = {
-  bg: "#0f0b1e",
-  card: "#1a1535",
-  primary: "#7F77DD",
-  light: "#AFA9EC",
-  dark: "#3C3489",
-  gold: "#EF9F27",
-  text: "#f0eeff",
-  muted: "#8b87b8",
-  border: "rgba(127,119,221,0.2)",
-};
-
-const FOCUS_OPTIONS = [
-  { id: "amor", label: "Amor e Relacionamentos", icon: "❤️" },
-  { id: "carreira", label: "Carreira e Propósito", icon: "💼" },
-  { id: "dinheiro", label: "Dinheiro e Prosperidade", icon: "💰" },
-  { id: "autoconhecimento", label: "Autoconhecimento", icon: "🧠" },
-  { id: "familia", label: "Família e Origens", icon: "👨‍👩‍👧" },
-  { id: "saude", label: "Energia e Saúde", icon: "⚡" },
-];
-
-const MONTHS = [
-  "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
-  "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro",
-];
-
-interface CityOption {
-  display: string;
-  flag: string;
-  city: string;
-  state: string;
-  country: string;
-  country_code: string;
-  lat: number;
-  lng: number;
-  tz_str: string;
-}
-
-interface DstInfo {
-  active: boolean | null;
-  ambiguous: boolean;
-  nonexistent: boolean;
-  utc_offset: string | null;
-  dst_offset_hours: number;
-  tz_name: string;
-}
-
-interface FormData {
-  name: string;
-  email: string;
-  whatsapp: string;
-  birth_day: string;
-  birth_month: string;
-  birth_year: string;
-  birth_hour: string;
-  birth_minute: string;
-  no_birth_time: boolean;
-  // City (geocoded)
-  city_query: string;         // what the user typed
-  selected_city: CityOption | null;
-  // DST
-  is_dst: boolean | null;     // null = auto, true/false = user confirmed
-  focus_areas: string[];
-  form_vida_agora: string;
-  form_carrega_tempo: string;
-  form_espera_descobrir: string;
-}
-
-const INITIAL: FormData = {
-  name: "", email: "", whatsapp: "",
-  birth_day: "", birth_month: "", birth_year: "",
-  birth_hour: "", birth_minute: "",
-  no_birth_time: false,
-  city_query: "", selected_city: null,
-  is_dst: null,
-  focus_areas: [],
-  form_vida_agora: "", form_carrega_tempo: "", form_espera_descobrir: "",
-};
-
-function Progress({ step, total }: { step: number; total: number }) {
-  return (
-    <div className="w-full mb-8">
-      <div className="flex justify-between mb-2">
-        <span className="text-xs" style={{ color: C.muted }}>Passo {step} de {total}</span>
-        <span className="text-xs" style={{ color: C.light }}>{Math.round((step / total) * 100)}%</span>
-      </div>
-      <div className="h-1 rounded-full" style={{ background: C.border }}>
-        <div
-          className="h-1 rounded-full transition-all duration-500"
-          style={{ width: `${(step / total) * 100}%`, background: `linear-gradient(90deg, ${C.dark}, ${C.primary})` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function Btn({ onClick, children, disabled, variant = "primary" }: {
-  onClick?: () => void; children: React.ReactNode; disabled?: boolean; variant?: "primary" | "ghost";
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="px-8 py-3 rounded-full font-semibold transition-all duration-200 hover:scale-105 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
-      style={variant === "primary" ? {
-        background: `linear-gradient(135deg, ${C.primary}, ${C.dark})`,
-        color: C.text,
-        boxShadow: `0 0 20px rgba(127,119,221,0.3)`,
-      } : {
-        background: "transparent",
-        color: C.muted,
-        border: `1px solid ${C.border}`,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Input({ value, onChange, placeholder, type = "text", disabled = false }: {
-  value: string; onChange: (v: string) => void; placeholder?: string; type?: string; disabled?: boolean;
-}) {
-  return (
-    <input
-      type={type}
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      placeholder={placeholder}
-      disabled={disabled}
-      className="w-full px-4 py-3 rounded-xl outline-none text-base transition-all disabled:opacity-40"
-      style={{
-        background: C.card,
-        color: C.text,
-        border: `1px solid ${C.border}`,
-      }}
-      onFocus={e => !disabled && (e.target.style.borderColor = C.primary)}
-      onBlur={e => (e.target.style.borderColor = C.border)}
-    />
-  );
-}
-
-function Textarea({ value, onChange, placeholder }: {
-  value: string; onChange: (v: string) => void; placeholder?: string;
-}) {
-  return (
-    <textarea
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      placeholder={placeholder}
-      rows={4}
-      className="w-full px-4 py-3 rounded-xl outline-none text-base resize-none transition-all"
-      style={{ background: C.card, color: C.text, border: `1px solid ${C.border}` }}
-      onFocus={e => (e.target.style.borderColor = C.primary)}
-      onBlur={e => (e.target.style.borderColor = C.border)}
-    />
-  );
-}
-
-function Note({ children }: { children: string }) {
-  return <p className="text-xs mt-2" style={{ color: C.muted }}>{children}</p>;
-}
+import {
+  C, FOCUS_OPTIONS, MONTHS, INITIAL,
+  Progress, Btn, Input, Note,
+  type CityOption, type DstInfo, type FormData,
+} from '@/components/funil/FunilUi';
+import FunilStepCity from '@/components/funil/FunilStepCity';
+import FunilStepQuestions from '@/components/funil/FunilStepQuestions';
 
 export default function Funil() {
   const [step, setStep] = useState(1);
@@ -559,202 +405,31 @@ export default function Funil() {
     </div>
   );
 
-  // Passo 7 — Cidade (autocomplete global)
   if (step === 7) return wrapper(
-    <div>
-      <h2 className="text-2xl font-bold mb-2" style={{ color: C.light }}>Em qual cidade você nasceu?</h2>
-      <p className="text-sm mb-6" style={{ color: C.muted }}>Funciona para qualquer cidade do mundo 🌍</p>
-
-      {/* Search input */}
-      <div className="relative mb-2">
-        <input
-          value={form.city_query}
-          onChange={e => onCityInput(e.target.value)}
-          onFocus={() => cityResults.length > 0 && setShowDropdown(true)}
-          placeholder="Digite a cidade (ex: São Paulo, Buenos Aires, Lisboa...)"
-          autoComplete="off"
-          className="w-full px-4 py-3 rounded-xl outline-none text-base transition-all pr-10"
-          style={{ background: C.card, color: C.text, border: `1px solid ${form.selected_city ? C.primary : C.border}` }}
-        />
-        {cityLoading && (
-          <span className="absolute right-3 top-3.5 text-lg animate-spin">⟳</span>
-        )}
-        {form.selected_city && !cityLoading && (
-          <span className="absolute right-3 top-3.5 text-lg">✓</span>
-        )}
-
-        {/* Dropdown */}
-        {showDropdown && cityResults.length > 0 && (
-          <div
-            className="absolute z-50 w-full mt-1 rounded-xl overflow-hidden shadow-2xl"
-            style={{ background: C.card, border: `1px solid ${C.border}` }}
-          >
-            {cityResults.map((c, i) => (
-              <button
-                key={i}
-                onMouseDown={() => selectCity(c)}
-                className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors border-b last:border-0"
-                style={{ borderColor: C.border }}
-              >
-                <span className="text-xl flex-shrink-0">{c.flag}</span>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate" style={{ color: C.text }}>{c.city}</p>
-                  <p className="text-xs truncate" style={{ color: C.muted }}>
-                    {[c.state, c.country].filter(Boolean).join(", ")}
-                    <span className="ml-2 opacity-60">{c.tz_str}</span>
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Cidade selecionada */}
-      {form.selected_city && (
-        <div className="rounded-xl p-4 mb-4 flex items-center gap-3"
-          style={{ background: `${C.primary}15`, border: `1px solid ${C.primary}40` }}>
-          <span className="text-2xl">{form.selected_city.flag}</span>
-          <div>
-            <p className="font-semibold text-sm" style={{ color: C.light }}>{form.selected_city.display}</p>
-            <p className="text-xs" style={{ color: C.muted }}>🕐 Fuso: {form.selected_city.tz_str}</p>
-          </div>
-          <button
-            onClick={() => { setForm(f => ({ ...f, selected_city: null, city_query: "" })); setDstInfo(null); }}
-            className="ml-auto text-sm px-2 py-1 rounded-lg"
-            style={{ color: C.muted, background: C.bg }}
-          >✕ trocar</button>
-        </div>
-      )}
-
-      {/* DST Warning — hora ambígua */}
-      {dstInfo?.ambiguous && form.selected_city && !form.no_birth_time && (
-        <div className="rounded-xl p-4 mb-4" style={{ background: "#1a1000", border: "1px solid #f59e0b" }}>
-          <p className="text-sm font-semibold mb-2" style={{ color: "#f59e0b" }}>
-            ⚠️ Horário ambíguo — confirmação necessária
-          </p>
-          <p className="text-xs mb-3" style={{ color: "#d4a" }}>
-            Em {form.birth_day}/{form.birth_month}/{form.birth_year}, o relógio foi atrasado em{" "}
-            {form.selected_city.tz_str.includes("Brazil") || form.selected_city.tz_str.includes("America/Sao") ? "São Paulo" : form.selected_city.country}.
-            A hora <strong>{form.birth_hour?.padStart(2,"0") || "?"}:{form.birth_minute?.padStart(2,"0") || "00"}</strong>{" "}
-            ocorreu duas vezes. Como está na certidão de nascimento?
-          </p>
-          <div className="flex gap-2">
-            {[
-              { label: "Horário de Verão", value: true, hint: "Relógio adiantado (1h a mais)" },
-              { label: "Horário Padrão", value: false, hint: "Após o relógio ser atrasado" },
-            ].map(opt => (
-              <button
-                key={String(opt.value)}
-                onClick={() => set("is_dst")(opt.value)}
-                className="flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all"
-                style={{
-                  background: form.is_dst === opt.value ? "#f59e0b" : C.card,
-                  color: form.is_dst === opt.value ? "#000" : C.muted,
-                  border: `1px solid ${form.is_dst === opt.value ? "#f59e0b" : C.border}`,
-                }}
-              >
-                {opt.label}<br /><span className="font-normal opacity-70">{opt.hint}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* DST Info — horário de verão ativo (não ambíguo) */}
-      {dstInfo?.active === true && !dstInfo.ambiguous && form.selected_city && !form.no_birth_time && (
-        <div className="rounded-xl p-3 mb-4 flex gap-3 items-start"
-          style={{ background: "#0a1a0a", border: "1px solid #34d399" }}>
-          <span className="text-lg mt-0.5">🌞</span>
-          <div>
-            <p className="text-xs font-medium" style={{ color: "#34d399" }}>Horário de verão detectado</p>
-            <p className="text-xs mt-0.5" style={{ color: "#a7f3d0" }}>
-              Em {form.birth_day}/{form.birth_month}/{form.birth_year} havia horário de verão em{" "}
-              {form.selected_city.country} ({dstInfo.utc_offset}). O sistema já considera isso automaticamente
-              — a hora da certidão é o horário local correto.
-            </p>
-          </div>
-        </div>
-      )}
-
-      <Note>A cidade é usada para calcular o Ascendente e posições das casas com precisão</Note>
-
-      {/* Aviso quando digitou mas não selecionou */}
-      {form.city_query.trim().length >= 2 && !form.selected_city && !cityLoading && (
-        <div className="mt-3 p-3 rounded-xl border text-left" style={{ borderColor: "#f59e0b", background: "#1a1200" }}>
-          <p className="text-xs font-semibold mb-1" style={{ color: "#f59e0b" }}>
-            ⚠ Selecione a cidade na lista acima
-          </p>
-          <p className="text-xs" style={{ color: "#a87d30" }}>
-            Clique em um resultado da lista para confirmar sua cidade. Se não aparecer, tente digitar o nome completo ou o nome em inglês (ex: &quot;Sao Paulo&quot;).
-          </p>
-        </div>
-      )}
-
-      <div className="flex justify-between mt-8">
-        <Btn onClick={back} variant="ghost">Voltar</Btn>
-        <Btn
-          onClick={next}
-          disabled={
-            !form.selected_city ||
-            (dstInfo?.ambiguous && form.is_dst === null)
-          }
-        >
-          {dstInfo?.ambiguous && form.is_dst === null ? "Confirme o horário acima" : "Continuar"}
-        </Btn>
-      </div>
-    </div>
+    <FunilStepCity
+      form={form}
+      cityResults={cityResults}
+      cityLoading={cityLoading}
+      showDropdown={showDropdown}
+      dstInfo={dstInfo}
+      onCityInput={onCityInput}
+      setShowDropdown={setShowDropdown}
+      selectCity={selectCity}
+      onClearCity={() => { setForm(f => ({ ...f, selected_city: null, city_query: '' })); setDstInfo(null); }}
+      onSelectDst={(v) => set('is_dst')(v)}
+      onBack={back}
+      onNext={next}
+    />
   );
 
-  // Passo 8 — Perguntas
   return wrapper(
-    <div>
-      <h2 className="text-2xl font-bold mb-2" style={{ color: C.light }}>Antes de finalizar...</h2>
-      <p className="text-sm mb-6" style={{ color: C.muted }}>
-        Essas respostas personalizam profundamente a sua leitura
-      </p>
-      <div className="space-y-5">
-        <div>
-          <label className="text-sm font-medium block mb-2" style={{ color: C.light }}>
-            O que está acontecendo na sua vida agora?
-          </label>
-          <Textarea value={form.form_vida_agora} onChange={set("form_vida_agora")} placeholder="Compartilhe o que estiver no seu coração..." />
-        </div>
-        <div>
-          <label className="text-sm font-medium block mb-2" style={{ color: C.light }}>
-            Se você pudesse mudar uma coisa na sua vida hoje, o que seria?
-          </label>
-          <Textarea value={form.form_carrega_tempo} onChange={set("form_carrega_tempo")} placeholder="Pode ser uma decisão, situação, padrão..." />
-        </div>
-        <div>
-          <label className="text-sm font-medium block mb-2" style={{ color: C.light }}>
-            O que você espera descobrir através do seu Mapa Astral?
-          </label>
-          <Textarea value={form.form_espera_descobrir} onChange={set("form_espera_descobrir")} placeholder="Quais respostas você busca?" />
-        </div>
-      </div>
-      {loading && (
-        <div className="mt-4 p-4 rounded-xl text-sm text-center" style={{ background: "#1a1535", border: "1px solid rgba(127,119,221,0.3)", color: "#AFA9EC" }}>
-          <div className="text-2xl mb-2 animate-pulse">✨</div>
-          <p className="font-semibold mb-1">Gerando seu Mapa da Alma...</p>
-          <p style={{ color: "#8b87b8" }}>Isso pode levar até 2 minutos. Não feche essa tela.</p>
-        </div>
-      )}
-      {error && !loading && (
-        <div className="mt-4 p-4 rounded-xl text-sm" style={{ background: "#2a0f0f", color: "#ff8080", border: "1px solid #ff4040" }}>
-          <p className="font-semibold mb-1">Não foi possível gerar o mapa</p>
-          <p className="text-xs mb-2" style={{ color: "#ff6060" }}>{error}</p>
-          <p className="text-xs" style={{ color: "#ff8080" }}>
-            Verifique sua conexão e tente novamente. Se o problema persistir, aguarde 1 minuto e tente de novo.
-          </p>
-        </div>
-      )}
-      <div className="flex justify-between mt-8">
-        <Btn onClick={back} variant="ghost">Voltar</Btn>
-        <Btn onClick={submit} disabled={loading}>
-          {loading ? "Gerando..." : "Gerar Meu Mapa →"}
-        </Btn>
-      </div>
-    </div>
+    <FunilStepQuestions
+      form={form}
+      loading={loading}
+      error={error}
+      onChangeField={(k, v) => set(k)(v)}
+      onBack={back}
+      onSubmit={submit}
+    />
   );
 }

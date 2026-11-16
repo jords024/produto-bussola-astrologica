@@ -55,4 +55,16 @@ Este documento registra todas as alterações estruturais realizadas nas tabelas
   - `updated_at` (TIMESTAMP, Default CURRENT_TIMESTAMP)
 - **Script de Migração:** `backend/scripts/create_backup_configs.py`
 
+---
+
+### [2026-11-16] Adição de Colunas de Consumo de IA na Tabela `analises`
+- **Tabela Afetada:** `analises`
+- **Objetivo:** Armazenar tokens e custo em USD de cada Leitura do Dia gerada pela OpenAI para consolidação na aba Financeiro.
+- **Colunas Criadas:**
+  - `prompt_tokens` (INTEGER, Default 0)
+  - `completion_tokens` (INTEGER, Default 0)
+  - `total_tokens` (INTEGER, Default 0)
+  - `cost_usd` (DOUBLE PRECISION, Default 0.0)
+- **Script de Migração:** `backend/scripts/add_analises_cost_columns.py`
+
 

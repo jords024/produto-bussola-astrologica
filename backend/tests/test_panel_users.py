@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from main import app, seed_admin
 from database import SessionLocal
-from models.models import User, UserInvite
+from models.models import User, UserInvite, Analise
 from routes.auth import hash_password
 
 client = TestClient(app)
@@ -392,6 +392,155 @@ def test_delete_client_with_linked_invites_succeeds():
         i = db.query(UserInvite).filter(UserInvite.id == inv_id).first()
         assert i is not None
         assert i.used_by_id is None
+    finally:
+        db.close()
+
+
+def test_create_panel_user_client_and_login():
+    token = get_admin_token()
+    email = f"testpaneluser_create_{uuid.uuid4().hex[:6]}@exemplo.com"
+    res = client.post(
+        "/admin/users",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "name": "Aluno Criado Manual",
+            "email": email,
+            "whatsapp": "+55 11999990000",
+            "password": "MinhaSenha@123",
+            "role": "client",
+        },
+    )
+    assert res.status_code == 201
+    data = res.json()
+    assert data["success"] is True
+    assert data["user"]["email"] == email.lower()
+    assert data["user"]["role"] == "client"
+    assert data["user"]["is_active"] is True
+
+    # Verificar que o usuário criado já consegue fazer login imediatamente
+    login_res = client.post("/auth/login", json={"email": email, "password": "MinhaSenha@123"})
+    assert login_res.status_code == 200
+    assert "token" in login_res.json()
+
+
+def test_create_panel_user_admin_succeeds():
+    token = get_admin_token()
+    email = f"testpaneluser_admin_{uuid.uuid4().hex[:6]}@exemplo.com"
+    res = client.post(
+        "/admin/users",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "name": "Admin Criado Manual",
+            "email": email,
+            "password": "AdminSenha@123",
+            "role": "admin",
+        },
+    )
+    assert res.status_code == 201
+    assert res.json()["user"]["role"] == "admin"
+
+
+def test_create_panel_user_duplicate_email_and_weak_passwords():
+    token = get_admin_token()
+    email = f"testpaneluser_dup_{uuid.uuid4().hex[:6]}@exemplo.com"
+
+    weak_passwords = [
+        "Curta@12",                 # menos de 12 caracteres
+        "senhasemmaiuscula@12",     # sem maiúscula
+        "SENHASEMMINUSCULA@12",     # sem minúscula
+        "SenhaSemNumero@abc",       # sem número
+        "SenhaSemEspecial1234",     # sem caractere especial
+    ]
+    for weak in weak_passwords:
+        weak_res = client.post(
+            "/admin/users",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"name": "Teste", "email": email, "password": weak, "role": "client"},
+        )
+        assert weak_res.status_code == 400
+
+    # Criação válida
+    ok_res = client.post(
+        "/admin/users",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"name": "Teste", "email": email, "password": "SenhaForte@123", "role": "client"},
+    )
+    assert ok_res.status_code == 201
+
+    # Duplicado
+    dup_res = client.post(
+        "/admin/users",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"name": "Teste 2", "email": email, "password": "SenhaForte@123", "role": "client"},
+    )
+    assert dup_res.status_code == 400
+    assert "e-mail" in dup_res.json()["detail"].lower()
+
+
+def test_create_panel_user_requires_admin():
+    token = get_admin_token()
+    email = f"testpaneluser_nonadmin_{uuid.uuid4().hex[:6]}@exemplo.com"
+    create_res = client.post(
+        "/admin/users",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"name": "Aluno Comum", "email": email, "password": "SenhaForte@123", "role": "client"},
+    )
+    assert create_res.status_code == 201
+
+    login_res = client.post("/auth/login", json={"email": email, "password": "SenhaForte@123"})
+    client_token = login_res.json()["token"]
+
+    forbidden_res = client.post(
+        "/admin/users",
+        headers={"Authorization": f"Bearer {client_token}"},
+        json={"name": "Outro", "email": f"testpaneluser_other_{uuid.uuid4().hex[:6]}@exemplo.com", "password": "SenhaForte@123", "role": "client"},
+    )
+    assert forbidden_res.status_code in (401, 403)
+
+
+def test_batch_delete_user_with_analises_succeeds():
+    from datetime import date
+    token = get_admin_token()
+    db = SessionLocal()
+    try:
+        user = User(
+            id=str(uuid.uuid4()),
+            name="Aluno Com Análise",
+            email=f"testpaneluser_analise_{uuid.uuid4().hex[:6]}@exemplo.com",
+            password_hash=hash_password("SenhaForte@123"),
+            role="client",
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+        uid = str(user.id)
+
+        analise = Analise(
+            id=str(uuid.uuid4()),
+            user_id=uid,
+            data_alvo=date.today(),
+            sintese="Leitura de teste",
+            status="ok",
+        )
+        db.add(analise)
+        db.commit()
+        aid = str(analise.id)
+    finally:
+        db.close()
+
+    res = client.request(
+        "DELETE",
+        "/admin/users/batch",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"ids": [uid]},
+    )
+    assert res.status_code == 200
+    assert res.json()["deleted_count"] == 1
+
+    db = SessionLocal()
+    try:
+        assert db.query(User).filter(User.id == uid).first() is None
+        assert db.query(Analise).filter(Analise.id == aid).first() is None
     finally:
         db.close()
 

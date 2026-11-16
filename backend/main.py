@@ -4,11 +4,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=False)
 
 from database import engine
 from models.models import Base
-from routes import auth, funnel, members, admin, geocoding, admin_chart, backups, docker_logs, invites
+from routes import auth, funnel, members, admin, geocoding, admin_chart, backups, docker_logs, invites, financeiro
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 
@@ -112,6 +112,10 @@ seed_admin()
 
 app = FastAPI(title="Bússola Astrológica API", version="1.0.0")
 
+# Origens permitidas dinâmicas
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
+dynamic_origins = [orig.strip() for orig in allowed_origins_env.split(",") if orig.strip()]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -125,8 +129,10 @@ app.add_middleware(
         "http://localhost:3001",
         "http://localhost:3002",
         "http://localhost:3003",
+        *dynamic_origins,
     ],
-    allow_credentials=False,
+    allow_origin_regex=r"https?://.*",
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -140,6 +146,7 @@ app.include_router(admin_chart.router)
 app.include_router(backups.router)
 app.include_router(docker_logs.router)
 app.include_router(invites.router)
+app.include_router(financeiro.router)
 
 
 @app.get("/health")

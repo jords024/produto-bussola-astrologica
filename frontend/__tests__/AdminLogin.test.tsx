@@ -52,7 +52,7 @@ describe("AdminLogin Component", () => {
     expect(passwordInput.getAttribute("type")).toBe("password");
   });
 
-  it("exibe mensagem de erro quando usuário não possui perfil de admin", async () => {
+  it("redireciona para /admin quando o login de aluno/cliente é bem-sucedido", async () => {
     (api.post as any).mockResolvedValueOnce({
       token: "fake-client-token",
       role: "client",
@@ -70,7 +70,7 @@ describe("AdminLogin Component", () => {
     fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Acesso restrito a administradores.")).toBeDefined();
+      expect(mockPush).toHaveBeenCalledWith("/admin");
     });
   });
 

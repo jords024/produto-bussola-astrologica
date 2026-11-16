@@ -1,11 +1,30 @@
 export function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL !== "http://localhost:8000") {
-    return process.env.NEXT_PUBLIC_API_URL;
+  // Se houver uma variável de ambiente definida, tem prioridade absoluta
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
   }
-  if (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
-    return "https://bussola-astrologica-api.onrender.com";
+
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+    // Ambiente local
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return "http://localhost:8005";
+    }
+
+    // Se estiver em subdomínio como 'bussolaappfront.dominio.com', tenta inferir 'bussolaappback.dominio.com' ou 'bussolaappapi...'
+    const protocol = window.location.protocol;
+    if (hostname.startsWith("bussolaappfront.")) {
+      return `${protocol}//${hostname.replace("bussolaappfront.", "bussolaappback.")}`;
+    }
+    if (hostname.includes("front")) {
+      return `${protocol}//${hostname.replace("front", "back")}`;
+    }
+
+    // Padrão genérico de subdomínio para API
+    return `${protocol}//api-${hostname}`;
   }
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+  return "http://localhost:8005";
 }
 
 function getToken(): string | null {

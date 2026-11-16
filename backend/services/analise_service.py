@@ -270,6 +270,10 @@ async def gerar_analise(
     analise.textos = textos
     analise.sintese = sintese
     analise.svg_content = svg
+    analise.prompt_tokens = int(custo_info.get("prompt_tokens", 0) or 0) if custo_info else 0
+    analise.completion_tokens = int(custo_info.get("completion_tokens", 0) or 0) if custo_info else 0
+    analise.total_tokens = int(custo_info.get("total_tokens", 0) or 0) if custo_info else 0
+    analise.cost_usd = float(custo_info.get("cost_usd", 0.0) or 0.0) if custo_info else 0.0
     analise.status = "ok" if sintese else "sem_ia"
     analise.created_at = datetime.utcnow()
     db.add(analise)

@@ -40,7 +40,14 @@ def _get_chart(user: User, db: Session) -> Chart:
 
 @router.get("/chart")
 def get_chart(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    chart = _get_chart(current_user, db)
+    chart = (
+        db.query(Chart)
+        .filter(Chart.user_id == current_user.id)
+        .order_by(Chart.created_at.desc())
+        .first()
+    )
+    if not chart:
+        return None
     return {
         "svg": chart.svg_content,
         "sun_sign": chart.sun_sign,
@@ -315,7 +322,7 @@ def download_pdf(current_user: User = Depends(get_current_user), db: Session = D
 
 
 @router.get("/podcast/engine")
-def podcast_engine():
+def podcast_engine(current_user: User = Depends(get_current_user)):
     """Informa qual engine de podcast está ativa."""
     return {"engine": "notebooklm" if notebooklm_available() else "openai-tts"}
 
@@ -582,7 +589,7 @@ def deletar_analise(
 
 
 @router.get("/areas")
-def listar_areas():
+def listar_areas(current_user: User = Depends(get_current_user)):
     """As áreas que a pessoa pode apontar como em jogo na leitura.
 
     Sai do backend e não do frontend porque é o mesmo mapa que decide a

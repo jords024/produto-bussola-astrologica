@@ -4,6 +4,7 @@ const nextConfig = {
   trailingSlash: true,
   images: { unoptimized: true },
   devIndicators: false,
+  allowedDevOrigins: ["bussolaappfront.aryaraj.shop", "*.aryaraj.shop"],
 };
 
 export default nextConfig;

@@ -23,3 +23,6 @@ Thumbs.db
 # Logs
 *.log
 backend/backend.log
+
+# Backups locais pré-refatoração
+backup/

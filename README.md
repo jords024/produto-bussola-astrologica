@@ -1,4 +1,4 @@
-# 🧭 Bússola Astrológica
+# 🧭 Bússola Astrológica (`v1.0.6`)
 
 Plataforma SaaS completa de astrologia e autoconhecimento com cálculo astronômico preciso, geração automatizada de mandalas SVG interativas com zoom/pan, relatórios em PDF, podcast cósmico com IA, área exclusiva de membros e painel de gestão com backup automático na nuvem.
 
@@ -18,7 +18,8 @@ Plataforma SaaS completa de astrologia e autoconhecimento com cálculo astronôm
   - **Barra Lateral Categorizada:** Divisão intuitiva em "Geral" (Home, Pesquisa, Histórico) e "Segurança" (Backup Automático, Sistema de Logs, Gestão de Usuários) com perfil do usuário logado.
   - **Pesquisa e Geração de Mapas:** Listagem permanente de todos os clientes cadastrados com seletor de data de referência para geração rápida em lote.
   - **Histórico de Gerações:** Log completo com horário de Brasília e exclusão em lote.
-  - **Gestão de Usuários e Convites:** Controle de acessos por papéis (`super_admin`, `admin`, `client`), senhas fortes e convites com verificação de código por e-mail (Brevo).
+  - **Gestão de Usuários e Convites:** Controle de acessos por papéis (`super_admin`, `admin`, `client`), criação manual direta com DDI e senha forte, convites com verificação de código por e-mail (Brevo) e exclusão em lote segura.
+  - **Financeiro (Consumo de IA):** Painel exclusivo para administradores consolidando gastos de OpenAI (Mapas Astrais + Leituras do Dia) por usuário e por período.
   - **Backups Automáticos & Logs:** Rotinas de backup do PostgreSQL com upload para a nuvem (Backblaze B2/S3), restauração com um clique e monitoramento de logs dos contêineres Docker em tempo real.
 
 ---
@@ -29,7 +30,7 @@ Plataforma SaaS completa de astrologia e autoconhecimento com cálculo astronôm
 - **Framework:** Next.js 14 (App Router)
 - **Linguagem:** TypeScript
 - **Estilização:** Tailwind CSS (tema Glassmorphism & Neon)
-- **Testes Unitários:** Vitest & React Testing Library (130 testes unitários - 100% aprovados)
+- **Testes Unitários:** Vitest & React Testing Library (158 testes unitários - 100% aprovados)
 
 ### Backend
 - **Framework:** FastAPI / Python 3.11
@@ -37,7 +38,7 @@ Plataforma SaaS completa de astrologia e autoconhecimento com cálculo astronôm
 - **Banco de Dados:** PostgreSQL 16 com SQLAlchemy
 - **Autenticação:** JWT com hashing seguro bcrypt
 - **E-mails & Convites:** Brevo API
-- **Testes Unitários:** Pytest (68 testes unitários isolados - 100% aprovados)
+- **Testes Unitários:** Pytest (suíte isolada de rotas, serviços, autenticação e financeiro)
 
 ---
 

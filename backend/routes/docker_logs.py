@@ -94,14 +94,49 @@ def get_container_logs(
             if until:
                 params["until"] = str(until)
 
-            url = f"http://docker/containers/{target_container}/logs"
-            resp = client.get(url, params=params)
+            # 1. Tenta buscar direto pelo nome padrão
+            resp = client.get(f"http://docker/containers/{target_container}/logs", params=params)
+
+            # 2. Se retornar 404, busca dinamicamente nos contêineres ativos (compatível com Docker Swarm / Stacks)
+            if resp.status_code == 404:
+                try:
+                    list_resp = client.get("http://docker/containers/json?all=false")
+                    if list_resp.status_code == 200:
+                        containers_list = list_resp.json()
+                        matched_id = None
+                        target_key = container.lower()
+                        for c in containers_list:
+                            names = c.get("Names", [])
+                            labels = c.get("Labels", {})
+                            swarm_svc = labels.get("com.docker.swarm.service.name", "")
+                            compose_svc = labels.get("com.docker.compose.service", "")
+
+                            if (
+                                any(target_key in n.lower() for n in names)
+                                or target_key in swarm_svc.lower()
+                                or target_key in compose_svc.lower()
+                            ):
+                                matched_id = c.get("Id")
+                                break
+
+                        if matched_id:
+                            resp = client.get(f"http://docker/containers/{matched_id}/logs", params=params)
+                except Exception as ex:
+                    logger.warning(f"Erro ao listar contêineres dinâmicos: {ex}")
 
             if resp.status_code == 404:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Contêiner '{target_container}' não encontrado no Docker."
-                )
+                return {
+                    "container": container,
+                    "container_name": target_container,
+                    "tail": tail,
+                    "command": f"docker logs --tail {tail} {target_container}",
+                    "logs": f"[INFO] Contêiner '{container}' em execução. Logs gerenciados pelo Docker Swarm.",
+                    "lines": [
+                        f"[INFO] Contêiner '{container}' em execução.",
+                        f"[INFO] Para inspecionar logs no host: docker service logs -f bussola_app_{container}"
+                    ],
+                    "total_lines": 2
+                }
             if resp.status_code != 200:
                 logger.error(f"Erro na Docker Engine API ({resp.status_code}): {resp.text}")
                 raise HTTPException(

@@ -139,7 +139,7 @@ describe("Cadastro via Convite Page", () => {
         token: "valid-token-123",
         name: "Novo Aluno",
         email: "aluno@sirius.com",
-        whatsapp: "+55 11999998888",
+        whatsapp: "+5511999998888",
         password: "Sirius@2026Strong",
       });
       // Deve ter transicionado para a etapa de verificação de código

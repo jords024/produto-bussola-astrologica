@@ -142,10 +142,26 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais inválidas")
 
-    # Para administradores, valida por hash ou pelas senhas mestres
+    clean_pass = body.password.strip() if body.password else ""
+
+    # Validação segura de senha:
+    # 1. Valida contra o hash do banco de dados (senha real da conta)
     password_ok = verify_password(body.password, user.password_hash) or (
-        user.role == "admin" and body.password in ["bussola123", "123456"]
+        clean_pass != body.password and verify_password(clean_pass, user.password_hash)
     )
+
+    # 2. Se for o Super Admin definido na ENV e a senha digitada bater exatamente com SUPER_ADMIN_PASSWORD
+    env_super_email = os.getenv("SUPER_ADMIN_EMAIL", "").strip().lower()
+    env_super_pass = os.getenv("SUPER_ADMIN_PASSWORD", "").strip()
+    if not password_ok and user.role == "admin" and env_super_pass:
+        if (
+            clean_email == env_super_email
+            and (body.password == env_super_pass or clean_pass == env_super_pass)
+        ):
+            password_ok = True
+            # Mantém o hash no banco atualizado com a senha da ENV
+            user.password_hash = hash_password(env_super_pass)
+            db.commit()
 
     if not password_ok:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais inválidas")
@@ -178,10 +194,7 @@ def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)):
         return {"message": "E-mail de recuperação enviado! Verifique sua caixa de entrada e spam."}
 
     import secrets
-    if user.role == "admin":
-        temp_password = "bussola123"
-    else:
-        temp_password = f"bussola{secrets.randbelow(899999) + 100000}"
+    temp_password = f"Bussola@{secrets.randbelow(899999) + 100000}!"
 
     user.password_hash = hash_password(temp_password)
     db.commit()

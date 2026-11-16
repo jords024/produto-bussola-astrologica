@@ -27,7 +27,7 @@ export default function UsuarioCard({
   return (
     <div
       data-testid={`user-row-${u.id}`}
-      className={`p-4 sm:p-5 rounded-2xl flex flex-wrap items-center justify-between gap-4 transition-all hover:border-purple-500/40 ${
+      className={`p-4 sm:p-5 rounded-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 transition-all hover:border-purple-500/40 w-full overflow-hidden ${
         isSelected ? "border-purple-500/60 bg-purple-500/5" : ""
       }`}
       style={{
@@ -35,7 +35,7 @@ export default function UsuarioCard({
         border: isSelected ? "1px solid rgba(127, 119, 221, 0.5)" : "1px solid rgba(127, 119, 221, 0.2)",
       }}
     >
-      <div className="flex items-center gap-3 min-w-[220px]">
+      <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
         {/* Checkbox de Seleção (Super Admin e Conta Atual protegidos) */}
         {!u.is_super_admin && !u.is_current_user ? (
           <input
@@ -138,8 +138,8 @@ export default function UsuarioCard({
         </div>
       </div>
 
-      <div className="flex items-center gap-3 sm:gap-4 shrink-0">
-        <div className="text-right space-y-1">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between lg:justify-end gap-2.5 sm:gap-4 w-full lg:w-auto pt-2 lg:pt-0 border-t lg:border-t-0 border-white/5">
+        <div className="text-left sm:text-right space-y-0.5 shrink-0">
           <p className="text-xs font-mono" style={{ color: "#AFA9EC" }} title="Data de Cadastro">
             Cadastrado em {formatBrasiliaDate(u.created_at)}
           </p>
@@ -154,7 +154,7 @@ export default function UsuarioCard({
         {u.is_super_admin ? (
           <span
             data-testid={`super-admin-tag-${u.id}`}
-            className="px-3 py-1.5 rounded-xl text-[11px] font-medium select-none"
+            className="px-3 py-1.5 rounded-xl text-[11px] font-medium select-none self-start sm:self-auto"
             style={{
               background: "rgba(255, 255, 255, 0.04)",
               color: "#8b87b8",
@@ -165,7 +165,7 @@ export default function UsuarioCard({
             🔒 Fixo (ENV)
           </span>
         ) : (
-          <div className="flex items-center gap-2 flex-wrap justify-end">
+          <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
             {/* Botão Redefinir Senha (gera link) */}
             {onResetPassword && (
               <button

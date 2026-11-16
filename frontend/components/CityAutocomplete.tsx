@@ -115,7 +115,7 @@ export default function CityAutocomplete({
       {cityDropdown && cityResults.length > 0 && (
         <div
           data-testid="city-dropdown"
-          className="absolute left-0 right-0 z-50 mt-1.5 max-h-56 overflow-y-auto rounded-xl bg-[#141418] border border-white/15 shadow-[0_15px_35px_rgba(0,0,0,0.85)] backdrop-blur-md divide-y divide-white/[0.06]"
+          className="absolute right-0 z-50 mt-1.5 min-w-full sm:w-[400px] sm:max-w-[90vw] max-h-60 overflow-y-auto rounded-xl bg-[#141418] border border-white/15 shadow-[0_15px_35px_rgba(0,0,0,0.85)] backdrop-blur-md divide-y divide-white/[0.06]"
         >
           {cityResults.map((item, idx) => (
             <button
@@ -131,7 +131,7 @@ export default function CityAutocomplete({
               <div className="flex items-center gap-2.5 min-w-0">
                 <span className="text-base shrink-0">{item.flag || "📍"}</span>
                 <div className="min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-zinc-100 group-hover:text-white truncate">
+                  <p className="text-xs sm:text-sm font-medium text-zinc-100 group-hover:text-white leading-snug">
                     {item.city}{item.state ? `, ${item.state}` : ""}
                   </p>
                   <p className="text-[10px] text-zinc-400">

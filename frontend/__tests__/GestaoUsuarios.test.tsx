@@ -138,7 +138,7 @@ describe("GestaoUsuarios Component", () => {
     });
   });
 
-  it("abre o modal de gerar convite ao clicar no botão Criar Usuário", async () => {
+  it("abre o modal de criação manual ao clicar no botão Criar Usuário", async () => {
     render(<GestaoUsuarios />);
 
     await waitFor(() => {
@@ -149,7 +149,23 @@ describe("GestaoUsuarios Component", () => {
     expect(createBtn).toBeDefined();
     fireEvent.click(createBtn);
 
-    // Modal deve ser exibido
+    await waitFor(() => {
+      expect(screen.getByTestId("criar-usuario-modal-backdrop")).toBeDefined();
+      expect(screen.getByText("Criar Usuário Manualmente")).toBeDefined();
+    });
+  });
+
+  it("abre o modal de gerar convite ao clicar no botão Gerar Convite", async () => {
+    render(<GestaoUsuarios />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Admin Master")).toBeDefined();
+    });
+
+    const inviteBtn = screen.getByTestId("open-generate-invite-modal-btn");
+    expect(inviteBtn).toBeDefined();
+    fireEvent.click(inviteBtn);
+
     await waitFor(() => {
       expect(screen.getByTestId("gerar-convite-modal-backdrop")).toBeDefined();
       expect(screen.getAllByText("Gerar Link de Convite").length).toBeGreaterThanOrEqual(1);

@@ -87,7 +87,7 @@ export function CountryPhoneInput({
     setSearchTerm("");
     const cleanPhone = phonePart.trim();
     if (cleanPhone) {
-      onChange(`${country.ddi} ${cleanPhone}`);
+      onChange(`${country.ddi}${cleanPhone}`);
     } else {
       onChange("");
     }
@@ -98,7 +98,7 @@ export function CountryPhoneInput({
     setPhonePart(raw);
     const clean = raw.trim();
     if (clean) {
-      onChange(`${selectedCountry.ddi} ${clean}`);
+      onChange(`${selectedCountry.ddi}${clean}`);
     } else {
       onChange("");
     }

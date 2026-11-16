@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 interface ChartZoomModalProps {
@@ -21,10 +21,27 @@ export default function ChartZoomModal({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [mounted, setMounted] = useState(false);
+  const viewportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+
+    const onNativeWheel = (e: WheelEvent) => {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+    };
+
+    el.addEventListener("wheel", onNativeWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onNativeWheel);
+    };
+  }, [mounted, isOpen]);
 
   if (!isOpen) return null;
 
@@ -60,8 +77,10 @@ export default function ChartZoomModal({
   };
 
   const handleWheel = (e: React.WheelEvent) => {
-    // Previne comportamento padrão de rolagem de página
-    e.preventDefault();
+    // Previne comportamento padrão apenas quando o evento for cancelável (evita erro de passive listener)
+    if (e.cancelable) {
+      e.preventDefault();
+    }
     if (e.deltaY < 0) {
       // Rolou para cima -> Zoom In
       setZoom((prev) => Math.min(Number((prev + 0.15).toFixed(2)), 4));
@@ -161,6 +180,7 @@ export default function ChartZoomModal({
 
         {/* Área Central Interativa com Zoom e Pan */}
         <div
+          ref={viewportRef}
           data-testid="zoom-viewport"
           onWheel={handleWheel}
           onMouseDown={handleMouseDown}

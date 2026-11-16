@@ -10,6 +10,8 @@ interface AdminSidebarProps {
   currentUser?: { name?: string; email?: string } | null;
   /** "admin" monta o menu de gestao; qualquer outro valor monta o do aluno. */
   papel?: string;
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export default function AdminSidebar({
@@ -18,6 +20,8 @@ export default function AdminSidebar({
   onLogout,
   currentUser,
   papel = "client",
+  mobileOpen = false,
+  onCloseMobile,
 }: AdminSidebarProps) {
   const [user, setUser] = useState<{ name?: string; email?: string } | null>(currentUser || null);
 
@@ -37,6 +41,18 @@ export default function AdminSidebar({
       })
       .catch(() => {});
   }, [currentUser]);
+
+  // Trava o scroll da página de trás quando o menu mobile está aberto
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (mobileOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [mobileOpen]);
   // O papel decide o menu inteiro. Aluno nunca ve item de gestao, e nao e so
   // estetica: ate aqui a tela de admin montava para qualquer um com token.
   const aluno = papel !== "admin";
@@ -158,6 +174,15 @@ export default function AdminSidebar({
                   </svg>
                 ),
               },
+              {
+                id: "financeiro",
+                label: "Financeiro",
+                icon: (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ),
+              },
             ],
           },
           {
@@ -195,33 +220,41 @@ export default function AdminSidebar({
         ]),
   ];
 
-  return (
-    <aside
-      className="w-64 h-screen sticky top-0 flex flex-col justify-between shrink-0 select-none"
-      style={{
-        background: "#110d26",
-        borderRight: "1px solid rgba(127, 119, 221, 0.15)",
-      }}
-    >
+  const renderContent = (isMobile = false) => (
+    <>
       <div className="flex flex-col min-h-0 flex-1">
         {/* Brand / Logo Header */}
         <div
-          className="p-6 flex items-start gap-3 shrink-0"
+          className="p-5 sm:p-6 flex items-start justify-between gap-3 shrink-0"
           style={{ borderBottom: "1px solid rgba(127, 119, 221, 0.12)" }}
         >
-          <span className="text-xl leading-none mt-0.5 text-amber-400">✨</span>
-          <div>
-            <h2 className="font-bold text-base leading-tight tracking-wide text-indigo-100">
-              Bússola Astrológica
-            </h2>
-            <p className="text-xs text-indigo-300/60 font-normal mt-0.5">
-              {aluno ? "A sua bússola" : "Painel de Gestão"}
-            </p>
+          <div className="flex items-start gap-3">
+            <span className="text-xl leading-none mt-0.5 text-amber-400">✨</span>
+            <div>
+              <h2 className="font-bold text-base leading-tight tracking-wide text-indigo-100">
+                Bússola Astrológica
+              </h2>
+              <p className="text-xs text-indigo-300/60 font-normal mt-0.5">
+                {aluno ? "A sua bússola" : "Painel de Gestão"}
+              </p>
+            </div>
           </div>
+          {isMobile && (
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              aria-label="Fechar menu"
+              className="p-1.5 -mr-1 text-indigo-300/70 hover:text-white rounded-lg hover:bg-white/5 active:scale-95 transition-all cursor-pointer"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Navigation Links agrupados por Categorias */}
-        <nav className="p-4 space-y-4 overflow-y-auto flex-1">
+        <nav className="p-4 space-y-4 overflow-y-auto overscroll-contain flex-1">
           {navSections.map((section) => (
             <div key={section.category} className="space-y-1">
               <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-indigo-300/40 select-none">
@@ -234,7 +267,10 @@ export default function AdminSidebar({
                     <button
                       key={item.id}
                       type="button"
-                      onClick={() => onSelectTab(item.id)}
+                      onClick={() => {
+                        onSelectTab(item.id);
+                        if (isMobile && onCloseMobile) onCloseMobile();
+                      }}
                       className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                         isActive
                           ? "text-indigo-100 shadow-sm"
@@ -316,7 +352,10 @@ export default function AdminSidebar({
         {/* Botão Sair */}
         <button
           type="button"
-          onClick={onLogout}
+          onClick={() => {
+            onLogout();
+            if (isMobile && onCloseMobile) onCloseMobile();
+          }}
           className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-indigo-300/60 hover:text-red-300 hover:bg-red-500/10 transition-all cursor-pointer"
         >
           <svg
@@ -335,6 +374,45 @@ export default function AdminSidebar({
           <span>Sair</span>
         </button>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop Sidebar (oculta em telas menores que md) */}
+      <aside
+        className="hidden md:flex w-64 h-screen sticky top-0 flex-col justify-between shrink-0 select-none overflow-hidden overscroll-contain"
+        style={{
+          background: "#110d26",
+          borderRight: "1px solid rgba(127, 119, 221, 0.15)",
+        }}
+      >
+        {renderContent(false)}
+      </aside>
+
+      {/* Mobile Backdrop */}
+      {mobileOpen && (
+        <div
+          data-testid="sidebar-mobile-backdrop"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 md:hidden transition-opacity"
+          onClick={onCloseMobile}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Mobile Slide-in Drawer */}
+      <aside
+        data-testid="sidebar-mobile-drawer"
+        className={`fixed inset-y-0 left-0 w-72 max-w-[85vw] z-50 flex flex-col justify-between select-none shadow-2xl transition-transform duration-300 ease-in-out md:hidden overflow-hidden overscroll-contain ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+        style={{
+          background: "#110d26",
+          borderRight: "1px solid rgba(127, 119, 221, 0.15)",
+        }}
+      >
+        {renderContent(true)}
+      </aside>
+    </>
   );
 }

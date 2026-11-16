@@ -6,7 +6,7 @@ trigger: always_on
 
 O repositório oficial do projeto é:
 
-**URL:** https://github.com/aryarajalves/area-de-membros.git
+**URL:** https://github.com/jords024/produto-bussola-astrologica.git
 
 **Protocolo Obrigatório:**
 1. Todo `git push` deve ser direcionado para este repositório.

@@ -163,6 +163,10 @@ class Analise(Base):
     # porque a pergunta de hoje nao e a de daqui a um mes, e o diario de bordo
     # so faz sentido se guardar a pergunta junto com a resposta.
     contexto = Column(JSONB)
+    prompt_tokens = Column(Integer, default=0)
+    completion_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    cost_usd = Column(Float, default=0.0)
     status = Column(String, default="ok")   # ok | sem_ia | erro
     created_at = Column(DateTime, default=datetime.utcnow)
 

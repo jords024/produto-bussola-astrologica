@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=False)
 
 if os.getenv("TESTING") == "1":
     DATABASE_URL = os.getenv("TEST_DATABASE_URL", "postgresql://postgres:sirius123@postgres:5432/bussolaapp_test")

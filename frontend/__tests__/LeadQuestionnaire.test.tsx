@@ -21,11 +21,11 @@ describe("LeadQuestionnaire", () => {
   });
 
   it("renderiza o formulário com os campos obrigatórios", async () => {
-    render(<LeadQuestionnaire />);
+    render(<LeadQuestionnaire papel="admin" />);
 
-    expect(screen.getByText(/Coleta de Informações do Lead/i)).toBeDefined();
+    expect(screen.getByText(/Dados de nascimento do cliente/i)).toBeDefined();
     expect(screen.getByPlaceholderText(/Ex: Gabriel Moreira Silva/i)).toBeDefined();
-    expect(screen.getByText(/Salvar Informações do Lead/i)).toBeDefined();
+    expect(screen.getByText(/Salvar dados do cliente/i)).toBeDefined();
   });
 
   it("carrega automaticamente as informações do lead previamente salvo", async () => {
@@ -48,7 +48,7 @@ describe("LeadQuestionnaire", () => {
       return Promise.resolve([]);
     });
 
-    render(<LeadQuestionnaire />);
+    render(<LeadQuestionnaire papel="admin" />);
 
     await waitFor(() => {
       const inputNome = screen.getByPlaceholderText(/Ex: Gabriel Moreira Silva/i) as HTMLInputElement;
@@ -63,10 +63,10 @@ describe("LeadQuestionnaire", () => {
   });
 
   it("não exibe botão de cadastrar outro lead e mantém os campos editáveis", async () => {
-    render(<LeadQuestionnaire />);
+    render(<LeadQuestionnaire papel="admin" />);
 
     expect(screen.queryByText(/Cadastrar Outro Lead/i)).toBeNull();
-    expect(screen.getByText(/Salvar Informações do Lead/i)).toBeDefined();
+    expect(screen.getByText(/Salvar dados do cliente/i)).toBeDefined();
   });
 
   it("exibe a latitude e longitude abaixo do campo de cidade quando disponíveis", async () => {

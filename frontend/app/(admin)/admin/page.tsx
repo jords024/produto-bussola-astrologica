@@ -12,6 +12,7 @@ import ClientDrawer from "@/components/ClientDrawer";
 import LeadQuestionnaire from "@/components/LeadQuestionnaire";
 import HistoricoPesquisas from "@/components/HistoricoPesquisas";
 import GestaoUsuarios from "@/components/GestaoUsuarios";
+import Financeiro from "@/components/Financeiro";
 import BackupAutomatico from "@/components/backup/BackupAutomatico";
 import GerenciamentoLogs from "@/components/GerenciamentoLogs";
 
@@ -24,6 +25,7 @@ export default function AdminPage() {
   // null = ainda nao sabemos. Nada de gestao e desenhado antes de saber.
   const [papel, setPapel] = useState<string | null>(null);
   const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const router = useRouter();
 
   const fetchDashboard = useCallback(async () => {
@@ -57,19 +59,48 @@ export default function AdminPage() {
       .catch(() => router.push("/admin/login"));
   }, []);
 
-  useEffect(() => {
+  const ADMIN_ONLY_TABS = new Set(["gestao_usuarios", "backup_automatico", "sistema_logs", "pesquisa", "historico", "financeiro"]);
+
+  const resolveTabName = (tab: string, role: string | null) => {
+    if (tab === "dados" || tab === "coleta") return "dados";
+    if (tab === "leitura" || tab === "analise") return role === "admin" ? "leitura" : "pesquisa";
+    if (tab === "diario") return role === "admin" ? "diario" : "historico";
+    if (tab === "bussola") return role === "admin" ? "bussola" : "home";
+    return tab;
+  };
+
+  const handleSelectTab = useCallback((tab: string) => {
+    setActiveTab(tab);
     if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const tab = params.get("tab");
-      if (tab) {
-        if (tab === "dados" || tab === "coleta") setActiveTab("dados");
-        else if (tab === "leitura" || tab === "analise") setActiveTab(papel === "admin" ? "leitura" : "pesquisa");
-        else if (tab === "diario") setActiveTab(papel === "admin" ? "diario" : "historico");
-        else if (tab === "bussola") setActiveTab(papel === "admin" ? "bussola" : "home");
-        else setActiveTab(tab);
-      }
+      try {
+        localStorage.setItem("bussola_admin_active_tab", tab);
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("tab") !== tab) {
+          url.searchParams.set("tab", tab);
+          window.history.replaceState(null, "", url.toString());
+        }
+      } catch {}
     }
   }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const urlTab = params.get("tab");
+        const savedTab = localStorage.getItem("bussola_admin_active_tab");
+        const initialTab = urlTab || savedTab;
+        if (initialTab) {
+          const resolved = resolveTabName(initialTab, papel);
+          if (papel && papel !== "admin" && ADMIN_ONLY_TABS.has(resolved)) {
+            setActiveTab("home");
+          } else {
+            setActiveTab(resolved);
+          }
+        }
+      } catch {}
+    }
+  }, [papel]);
 
   const openClient = async (id: string) => {
     try {
@@ -108,21 +139,24 @@ export default function AdminPage() {
     setShowLogoutModal(false);
     localStorage.removeItem("bussola_token");
     localStorage.removeItem("sirius_token");
+    localStorage.removeItem("bussola_admin_active_tab");
     router.push("/admin/login");
   };
 
   return (
     <div
-      className="min-h-screen flex"
+      className="h-screen flex overflow-hidden"
       style={{ background: C.bg, color: C.text }}
     >
       {/* Barra Lateral com Categorias, Usuário Logado e Sair */}
       <AdminSidebar
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={handleSelectTab}
         onLogout={() => setShowLogoutModal(true)}
         currentUser={currentUser}
         papel={papel || "client"}
+        mobileOpen={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
       />
 
       <Tutorial
@@ -132,35 +166,49 @@ export default function AdminPage() {
       />
 
       {/* Conteúdo Principal */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header Superior */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        {/* Header Superior Responsivo */}
         <header
-          className="px-8 py-4 flex items-center justify-between"
+          className="px-4 sm:px-8 py-3.5 flex items-center justify-between gap-3 shrink-0"
           style={{
             borderBottom: `1px solid ${C.border}`,
             background: "#130f2c",
           }}
         >
-          <h1 className="text-xl font-bold" style={{ color: C.light }}>
-            {activeTab === "home"
-              ? papel !== "admin" ? "Minha Bússola" : "Cadastrar Mapa"
-              : activeTab === "pesquisa" || activeTab === "leitura"
-              ? papel !== "admin" ? "A leitura do dia" : "Pesquisa de Clientes"
-              : activeTab === "historico" || activeTab === "diario"
-              ? "Diário de bordo"
-              : activeTab === "bussola"
-              ? "Minha Bússola"
-              : activeTab === "dados"
-              ? "Meus Dados de Nascimento"
-              : activeTab === "backup_automatico"
-              ? "Backup Automático"
-              : activeTab === "sistema_logs"
-              ? "Sistema de Logs"
-              : "Gestão de Usuários"}
-          </h1>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Abrir menu de navegação"
+              className="md:hidden p-1.5 -ml-1 text-indigo-200 hover:text-white rounded-lg hover:bg-white/5 active:scale-95 transition-all cursor-pointer shrink-0"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <h1 className="text-base sm:text-xl font-bold truncate" style={{ color: C.light }}>
+              {activeTab === "home"
+                ? papel !== "admin" ? "Minha Bússola" : "Cadastrar Mapa"
+                : activeTab === "pesquisa" || activeTab === "leitura"
+                ? papel !== "admin" ? "A leitura do dia" : "Pesquisa de Clientes"
+                : activeTab === "historico" || activeTab === "diario"
+                ? "Diário de bordo"
+                : activeTab === "bussola"
+                ? "Minha Bússola"
+                : activeTab === "dados"
+                ? "Meus Dados de Nascimento"
+                : activeTab === "backup_automatico"
+                ? "Backup Automático"
+                : activeTab === "sistema_logs"
+                ? "Sistema de Logs"
+                : activeTab === "financeiro"
+                ? "Financeiro"
+                : "Gestão de Usuários"}
+            </h1>
+          </div>
+          <div className="flex items-center gap-4 shrink-0">
             <span
-              className="text-sm font-semibold tracking-wide"
+              className="text-xs sm:text-sm font-semibold tracking-wide hidden xs:inline"
               style={{ color: C.muted }}
             >
               {papel !== "admin" ? "Bússola Astrológica" : "Bussola Astrologica"}
@@ -168,8 +216,8 @@ export default function AdminPage() {
           </div>
         </header>
 
-        {/* Corpo da Página */}
-        <main className="p-8 flex-1 overflow-auto">
+        {/* Corpo da Página Responsivo */}
+        <main className="p-4 sm:p-8 flex-1 overflow-y-auto overscroll-contain">
           {/* Enquanto o papel nao chega, nada e desenhado: o que vazava antes
               era justamente a tela de gestao aparecendo durante esse vao. */}
           {papel === null && (
@@ -234,6 +282,9 @@ export default function AdminPage() {
           {activeTab === "historico" && (
             <HistoricoPesquisas onOpenClient={openClient} />
           )}
+
+          {/* Aba Financeiro */}
+          {activeTab === "financeiro" && <Financeiro />}
 
           {/* Aba Backup Automático */}
           {activeTab === "backup_automatico" && <BackupAutomatico />}

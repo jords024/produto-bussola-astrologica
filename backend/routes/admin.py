@@ -10,9 +10,10 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, cast, Date
 from sqlalchemy.orm import Session
 
-from models.models import User, Chart, ChartSection, GenerationLog, UserInvite
+from models.models import User, Chart, ChartSection, GenerationLog, UserInvite, Analise
 from database import get_db
 from routes.auth import require_admin, hash_password, create_token
+from routes.invites import validate_strong_password
 from services.geocoding_service import city_to_coordinates
 from services.astro_service import generate_birth_chart
 from services.ai_service import generate_sections, generate_missing_sections
@@ -207,6 +208,14 @@ def list_clients(
 
 # ── Panel Users (Gestão de Usuários) ─────────────────────────────────────────
 
+class CreatePanelUserRequest(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    whatsapp: Optional[str] = None
+    role: str = "client"
+
+
 class UpdatePanelUserRequest(BaseModel):
     name: Optional[str] = None
     email: Optional[EmailStr] = None
@@ -262,6 +271,58 @@ def list_panel_users(
     items.sort(key=lambda x: (not x["is_super_admin"],))
 
     return {"items": items, "total": len(items)}
+
+
+@router.post("/users", status_code=status.HTTP_201_CREATED)
+def create_panel_user(
+    body: CreatePanelUserRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Cria manualmente um novo usuário (aluno ou admin) já ativo e verificado."""
+    clean_name = body.name.strip()
+    if not clean_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Informe o nome do usuário.")
+    validate_strong_password(body.password)
+
+    clean_role = (body.role or "client").strip().lower()
+    if clean_role not in ("client", "admin"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Papel inválido. Use 'client' ou 'admin'.")
+
+    clean_email = str(body.email).strip().lower()
+    if db.query(User).filter(func.lower(User.email) == clean_email).first():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Já existe um usuário cadastrado com este e-mail.")
+
+    clean_whatsapp = (body.whatsapp.strip() or None) if body.whatsapp else None
+    new_user = User(
+        id=str(uuid.uuid4()),
+        name=clean_name,
+        email=clean_email,
+        whatsapp=clean_whatsapp,
+        password_hash=hash_password(body.password),
+        role=clean_role,
+        is_active=True,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    logger.info(f"Usuário '{new_user.email}' ({new_user.role}) criado manualmente por '{current_user.email}'.")
+    return {
+        "success": True,
+        "message": "Usuário criado com sucesso.",
+        "user": {
+            "id": str(new_user.id),
+            "name": new_user.name,
+            "email": new_user.email,
+            "whatsapp": new_user.whatsapp,
+            "role": new_user.role,
+            "is_active": new_user.is_active,
+            "is_super_admin": False,
+            "is_current_user": False,
+            "created_at": new_user.created_at.isoformat() if new_user.created_at else None,
+        },
+    }
 
 
 @router.put("/users/{user_id}")
@@ -326,6 +387,23 @@ def update_panel_user(
     }
 
 
+def _delete_user_with_relations(db: Session, target_user: User) -> None:
+    """Remove mapas, seções, análises e desvincula convites antes de excluir o usuário."""
+    charts = db.query(Chart).filter(Chart.user_id == target_user.id).all()
+    for ch in charts:
+        db.query(ChartSection).filter(ChartSection.chart_id == ch.id).delete(synchronize_session=False)
+        db.delete(ch)
+
+    db.query(Analise).filter(Analise.user_id == target_user.id).delete(synchronize_session=False)
+    db.query(UserInvite).filter(UserInvite.used_by_id == target_user.id).update(
+        {"used_by_id": None}, synchronize_session=False
+    )
+    db.query(UserInvite).filter(UserInvite.created_by_id == target_user.id).update(
+        {"created_by_id": None}, synchronize_session=False
+    )
+    db.delete(target_user)
+
+
 @router.delete("/users/batch")
 @router.post("/users/batch-delete")
 def delete_panel_users_batch(
@@ -361,21 +439,7 @@ def delete_panel_users_batch(
                 super_admin_protected = True
                 continue
 
-            # Remove mapas e seções vinculados
-            charts = db.query(Chart).filter(Chart.user_id == target_user.id).all()
-            for ch in charts:
-                db.query(ChartSection).filter(ChartSection.chart_id == ch.id).delete(synchronize_session=False)
-                db.delete(ch)
-
-            # Desvincula convites para evitar violação de integridade referencial (FK)
-            db.query(UserInvite).filter(UserInvite.used_by_id == target_user.id).update(
-                {"used_by_id": None}, synchronize_session=False
-            )
-            db.query(UserInvite).filter(UserInvite.created_by_id == target_user.id).update(
-                {"created_by_id": None}, synchronize_session=False
-            )
-
-            db.delete(target_user)
+            _delete_user_with_relations(db, target_user)
             deleted_count += 1
 
         db.commit()
@@ -592,22 +656,9 @@ def delete_client(
             detail="Não é possível apagar um usuário admin.",
         )
 
-    # Apaga seções, mapas e desvincula convites antes de excluir o usuário
+    # Apaga seções, mapas, análises e desvincula convites antes de excluir o usuário
     try:
-        charts = db.query(Chart).filter(Chart.user_id == client_id).all()
-        for chart in charts:
-            db.query(ChartSection).filter(ChartSection.chart_id == chart.id).delete(synchronize_session=False)
-            db.delete(chart)
-
-        # Desvincula convites para evitar violação de Foreign Key
-        db.query(UserInvite).filter(UserInvite.used_by_id == user.id).update(
-            {"used_by_id": None}, synchronize_session=False
-        )
-        db.query(UserInvite).filter(UserInvite.created_by_id == user.id).update(
-            {"created_by_id": None}, synchronize_session=False
-        )
-
-        db.delete(user)
+        _delete_user_with_relations(db, user)
         db.commit()
         logger.info("Cliente '%s' (%s) removido pelo admin.", user.name, user.email)
     except Exception as e:

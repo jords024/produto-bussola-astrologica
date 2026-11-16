@@ -28,7 +28,7 @@ def test_send_brevo_code_success(mock_post):
         assert result is True
         assert mock_post.called
         args, kwargs = mock_post.call_args
-        assert kwargs["json"]["to"][0]["email"] == "aluno@sirius.com"
+        assert kwargs["json"]["to"][0]["email"] == "cliente@bussola.com"
         assert "654321" in kwargs["json"]["subject"]
 
 
