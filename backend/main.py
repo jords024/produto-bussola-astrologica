@@ -16,8 +16,9 @@ from sqlalchemy import func
 from database import SessionLocal, engine
 from models.models import Base, User, Chart
 from routes.auth import hash_password
+from services.schema_sync import ensure_schema
 
-Base.metadata.create_all(bind=engine)
+ensure_schema(engine, Base)
 
 def seed_admin():
     db = SessionLocal()

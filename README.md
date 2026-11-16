@@ -1,4 +1,4 @@
-# 🧭 Bússola Astrológica (`v1.0.6`)
+# 🧭 Bússola Astrológica (`v1.0.9`)
 
 Plataforma SaaS completa de astrologia e autoconhecimento com cálculo astronômico preciso, geração automatizada de mandalas SVG interativas com zoom/pan, relatórios em PDF, podcast cósmico com IA, área exclusiva de membros e painel de gestão com backup automático na nuvem.
 

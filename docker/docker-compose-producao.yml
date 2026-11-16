@@ -15,7 +15,7 @@ services:
   # 1. Serviço de Backend (FastAPI + Python 3.11 + Uvicorn)
   # ----------------------------------------------------------------------------
   bussola_app_backend:
-    image: ${BACKEND_IMAGE:-aryalvesfernandes/bussola-app:backend-1.0.5}
+    image: ${BACKEND_IMAGE:-aryalvesfernandes/bussola-app:backend-1.0.9}
     hostname: "{{.Service.Name}}.{{.Task.Slot}}"
     volumes:
       - bussola_app_uploads:/app/uploads
@@ -111,7 +111,7 @@ services:
   # 2. Serviço de Frontend (Next.js Standalone / Nginx Produção)
   # ----------------------------------------------------------------------------
   bussola_app_frontend:
-    image: ${FRONTEND_IMAGE:-aryalvesfernandes/bussola-app:frontend-1.0.5}
+    image: ${FRONTEND_IMAGE:-aryalvesfernandes/bussola-app:frontend-1.0.9}
     hostname: "{{.Service.Name}}.{{.Task.Slot}}"
     networks:
       - network_swarm_public
