@@ -128,4 +128,27 @@ describe("CriarUsuarioModal Component", () => {
     expect(onUserCreated).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("envia access_days quando selecionado prazo de 30 dias para aluno", async () => {
+    (api.post as any).mockResolvedValue({ success: true });
+
+    render(<CriarUsuarioModal isOpen={true} onClose={onClose} onUserCreated={onUserCreated} />);
+
+    fireEvent.change(screen.getByTestId("create-user-name-input"), { target: { value: "Aluno 30d" } });
+    fireEvent.change(screen.getByTestId("create-user-email-input"), { target: { value: "aluno30@exemplo.com" } });
+    fireEvent.change(screen.getByTestId("create-user-password-input"), { target: { value: "SenhaForte@123" } });
+    fireEvent.click(screen.getByTestId("access-preset-30"));
+    fireEvent.click(screen.getByTestId("submit-create-user-btn"));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith("/admin/users", {
+        name: "Aluno 30d",
+        email: "aluno30@exemplo.com",
+        whatsapp: null,
+        password: "SenhaForte@123",
+        role: "client",
+        access_days: 30,
+      });
+    });
+  });
 });

@@ -67,4 +67,47 @@ Este documento registra todas as alterações estruturais realizadas nas tabelas
   - `cost_usd` (DOUBLE PRECISION, Default 0.0)
 - **Script de Migração:** `backend/scripts/add_analises_cost_columns.py`
 
+---
+
+### [2026-11-17] Controle de Tempo de Acesso (`users.access_expires_at` e `user_invites.access_days`)
+- **Tabelas Afetadas:** `users`, `user_invites`
+- **Objetivo:** Permitir definir prazo de acesso à plataforma/IA para alunos (com expiração parcial bloqueando apenas novas gerações de IA, mantendo admins/super admin sem expiração).
+- **Colunas Criadas:**
+  - `users.access_expires_at` (TIMESTAMP, Nullable — `NULL` indica acesso vitalício)
+  - `user_invites.access_days` (INTEGER, Nullable — dias de acesso concedidos ao usuário ao aceitar o convite)
+- **Script de Migração:** `backend/scripts/add_access_expiration_columns.py`
+
+---
+
+### [2026-11-17] Suporte a Múltiplos Perfis Astrológicos (`astro_profiles`, `users` e `analises`)
+- **Tabelas Afetadas:** `users`, `astro_profiles` (Nova tabela), `analises`
+- **Objetivo:** Permitir configurar por aluno se ele pode cadastrar múltiplas pessoas (e o limite máximo ou ilimitado), armazenar os mapas natais dessas pessoas em `astro_profiles` e vincular leituras (`analises`) ao perfil escolhido.
+- **Alterações:**
+  - `users.allow_multiple_profiles` (BOOLEAN, Default FALSE)
+  - `users.max_extra_profiles` (INTEGER, Nullable — `NULL` indica ilimitado quando ativo)
+  - Nova tabela `astro_profiles` (`id`, `owner_user_id`, `name`, `relationship_label`, `birth_date`, `birth_time`, `birth_city`, `birth_state`, `birth_country`, `tz_str`, `lat`, `lng`, `sun_sign`, `moon_sign`, `rising_sign`, `svg_content`, `chart_data`, `created_at`, `updated_at`)
+  - `analises.profile_id` (UUID, Nullable, Foreign Key -> `astro_profiles.id`)
+- **Script de Migração:** `backend/scripts/add_multiple_profiles_columns.py`
+
+---
+
+### [2026-11-17] Criação da Tabela `tutorial_lessons` (Comece Aqui)
+- **Tabela Afetada:** `tutorial_lessons` (Nova tabela)
+- **Objetivo:** Armazenar os tutoriais em vídeo (upload local ou link externo) e em texto exibidos na aba **Comece Aqui**.
+- **Colunas Criadas:**
+  - `id` (UUID, Primary Key)
+  - `title` (VARCHAR, Not Null)
+  - `description` (TEXT)
+  - `lesson_type` (VARCHAR, Default `'video'`) — `'video'` ou `'text'`
+  - `video_source` (VARCHAR, Default `'url'`) — `'upload'` ou `'url'`
+  - `video_url` (TEXT, Nullable)
+  - `text_content` (TEXT)
+  - `duration` (VARCHAR)
+  - `sort_order` (INTEGER, Default `0`)
+  - `created_by_id` (UUID, Nullable, Foreign Key -> `users.id`)
+  - `created_at`, `updated_at` (TIMESTAMP)
+- **Script de Migração:** `backend/scripts/add_tutorials_table.py`
+
+
+
 

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import CityAutocomplete from "@/components/CityAutocomplete";
 import BrazilStateSelect from "@/components/BrazilStateSelect";
+import PerfisExtrasManager from "@/components/PerfisExtrasManager";
 import { CityOption, BRAZIL_STATES, COUNTRIES } from "@/lib/locationConstants";
 
 interface ColetaDadosBussolaProps {
@@ -388,6 +389,7 @@ export default function ColetaDadosBussola({
           )}
         </div>
       </form>
+      <PerfisExtrasManager />
     </div>
   );
 }

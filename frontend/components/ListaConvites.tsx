@@ -14,6 +14,7 @@ export interface PanelInvite {
   role_label: string;
   validity_type: string;
   expires_at: string | null;
+  access_days?: number | null;
   created_at: string;
   is_used: boolean;
   used_at: string | null;

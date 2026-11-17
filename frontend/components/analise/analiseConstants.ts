@@ -208,10 +208,16 @@ export interface ItemHistorico {
   data_fim?: string | null;
   status: string;
   tem_sintese: boolean;
+  sintese_preview?: string;
+  profile_id?: string | null;
+  profile_name?: string | null;
+  created_at?: string | null;
   contexto?: {
     area?: string | null;
     pergunta?: string | null;
     data_fim?: string | null;
+    profile_id?: string | null;
+    profile_name?: string | null;
   };
 }
 

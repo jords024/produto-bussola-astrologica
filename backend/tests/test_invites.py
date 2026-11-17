@@ -400,3 +400,44 @@ def test_resend_verification_code_flow():
     assert verify_res.json()["success"] is True
 
 
+def test_verify_register_link_flow():
+    from unittest.mock import patch
+    token = get_admin_token()
+    res_inv = client.post(
+        "/admin/invites",
+        json={"role": "client", "validity_type": "24h"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_inv.status_code == 200
+    invite_token = res_inv.json()["token"]
+
+    user_email = f"link_verify_{uuid.uuid4().hex[:8]}@sirius.com"
+    captured_urls = []
+
+    def _fake_send_link(to_email: str, name: str, confirm_url: str) -> bool:
+        captured_urls.append(confirm_url)
+        return True
+
+    with patch("routes.invites.send_brevo_verification_link", side_effect=_fake_send_link):
+        req_res = client.post(
+            "/auth/request-register-code",
+            json={
+                "token": invite_token,
+                "name": "Aluno Botão Email",
+                "email": user_email,
+                "password": "Sirius@2026StrongPassword",
+            },
+        )
+    assert req_res.status_code == 200
+    assert len(captured_urls) == 1
+    assert "/cadastro/confirmar?token=" in captured_urls[0]
+
+    verif_token = captured_urls[0].split("token=")[1]
+    verify_res = client.post("/auth/verify-register-link", json={"token": verif_token})
+    assert verify_res.status_code == 200
+    data = verify_res.json()
+    assert data["success"] is True
+    assert data["email"] == user_email
+    assert data["token"]
+
+

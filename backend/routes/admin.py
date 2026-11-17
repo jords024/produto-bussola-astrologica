@@ -21,6 +21,10 @@ from services.pdf_service import generate_pdf
 from services.email_service import send_boas_vindas
 
 from services.client_service import get_client_detail_polymorphic
+from services.access_service import is_user_access_expired, format_access_expires_at, resolve_access_expires_at
+from services.profile_service import (
+    apply_multiple_profiles_config, delete_user_with_relations, serialize_panel_user
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
@@ -214,6 +218,11 @@ class CreatePanelUserRequest(BaseModel):
     password: str
     whatsapp: Optional[str] = None
     role: str = "client"
+    access_days: Optional[int] = None
+    access_expires_at: Optional[str] = None
+    allow_multiple_profiles: Optional[bool] = False
+    max_extra_profiles: Optional[int] = None
+    unlimited_extra_profiles: Optional[bool] = False
 
 
 class UpdatePanelUserRequest(BaseModel):
@@ -222,6 +231,12 @@ class UpdatePanelUserRequest(BaseModel):
     whatsapp: Optional[str] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
+    access_days: Optional[int] = None
+    access_expires_at: Optional[str] = None
+    clear_expiration: Optional[bool] = False
+    allow_multiple_profiles: Optional[bool] = None
+    max_extra_profiles: Optional[int] = None
+    unlimited_extra_profiles: Optional[bool] = False
 
 
 class BatchDeleteUsersRequest(BaseModel):
@@ -253,19 +268,7 @@ def list_panel_users(
     for u in users:
         is_super = (u.email.strip().lower() == super_admin_email) if u.email else False
         is_cur = (str(u.id) == str(current_user.id))
-        items.append({
-            "id": str(u.id),
-            "name": u.name,
-            "email": u.email,
-            "whatsapp": u.whatsapp,
-            "role": u.role,
-            "is_active": u.is_active,
-            "is_super_admin": is_super,
-            "is_current_user": is_cur,
-            "created_at": u.created_at.isoformat() if u.created_at else None,
-            "sun_sign": u.sun_sign,
-            "birth_city": u.birth_city,
-        })
+        items.append(serialize_panel_user(u, is_super=is_super, is_current=is_cur, include_birth_summary=True))
 
     # Super admin no topo
     items.sort(key=lambda x: (not x["is_super_admin"],))
@@ -294,6 +297,7 @@ def create_panel_user(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Já existe um usuário cadastrado com este e-mail.")
 
     clean_whatsapp = (body.whatsapp.strip() or None) if body.whatsapp else None
+    expires_at_dt = resolve_access_expires_at(clean_role, body.access_days, body.access_expires_at)
     new_user = User(
         id=str(uuid.uuid4()),
         name=clean_name,
@@ -302,27 +306,19 @@ def create_panel_user(
         password_hash=hash_password(body.password),
         role=clean_role,
         is_active=True,
+        access_expires_at=expires_at_dt,
+    )
+    apply_multiple_profiles_config(
+        new_user, clean_role, body.allow_multiple_profiles, body.max_extra_profiles, bool(body.unlimited_extra_profiles)
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
     logger.info(f"Usuário '{new_user.email}' ({new_user.role}) criado manualmente por '{current_user.email}'.")
-    return {
-        "success": True,
-        "message": "Usuário criado com sucesso.",
-        "user": {
-            "id": str(new_user.id),
-            "name": new_user.name,
-            "email": new_user.email,
-            "whatsapp": new_user.whatsapp,
-            "role": new_user.role,
-            "is_active": new_user.is_active,
-            "is_super_admin": False,
-            "is_current_user": False,
-            "created_at": new_user.created_at.isoformat() if new_user.created_at else None,
-        },
-    }
+    user_payload = serialize_panel_user(new_user)
+    user_payload["created_at"] = new_user.created_at.isoformat() if new_user.created_at else None
+    return {"success": True, "message": "Usuário criado com sucesso.", "user": user_payload}
 
 
 @router.put("/users/{user_id}")
@@ -365,6 +361,16 @@ def update_panel_user(
     if body.is_active is not None:
         user.is_active = body.is_active
 
+    effective_role = (body.role.strip() if body.role is not None else user.role)
+    if effective_role == "admin" or body.clear_expiration:
+        user.access_expires_at = None
+    elif body.access_days is not None or body.access_expires_at is not None:
+        user.access_expires_at = resolve_access_expires_at(effective_role, body.access_days, body.access_expires_at)
+
+    apply_multiple_profiles_config(
+        user, effective_role, body.allow_multiple_profiles, body.max_extra_profiles, bool(body.unlimited_extra_profiles)
+    )
+
     db.commit()
     db.refresh(user)
 
@@ -374,34 +380,12 @@ def update_panel_user(
     return {
         "success": True,
         "message": "Usuário atualizado com sucesso.",
-        "user": {
-            "id": str(user.id),
-            "name": user.name,
-            "email": user.email,
-            "whatsapp": user.whatsapp,
-            "role": user.role,
-            "is_active": user.is_active,
-            "is_super_admin": is_super,
-            "is_current_user": is_cur,
-        },
+        "user": serialize_panel_user(user, is_super=is_super, is_current=is_cur),
     }
 
 
 def _delete_user_with_relations(db: Session, target_user: User) -> None:
-    """Remove mapas, seções, análises e desvincula convites antes de excluir o usuário."""
-    charts = db.query(Chart).filter(Chart.user_id == target_user.id).all()
-    for ch in charts:
-        db.query(ChartSection).filter(ChartSection.chart_id == ch.id).delete(synchronize_session=False)
-        db.delete(ch)
-
-    db.query(Analise).filter(Analise.user_id == target_user.id).delete(synchronize_session=False)
-    db.query(UserInvite).filter(UserInvite.used_by_id == target_user.id).update(
-        {"used_by_id": None}, synchronize_session=False
-    )
-    db.query(UserInvite).filter(UserInvite.created_by_id == target_user.id).update(
-        {"created_by_id": None}, synchronize_session=False
-    )
-    db.delete(target_user)
+    delete_user_with_relations(db, target_user)
 
 
 @router.delete("/users/batch")

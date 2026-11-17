@@ -203,5 +203,22 @@ describe("AdminSidebar Component", () => {
       fireEvent.click(sairBtns[0]);
       expect(handleLogout).toHaveBeenCalledTimes(1);
     });
+
+    it("exibe Comece Aqui antes de Minha Bússola para o aluno", () => {
+      render(
+        <AdminSidebar
+          activeTab="comece_aqui"
+          onSelectTab={vi.fn()}
+          onLogout={vi.fn()}
+          papel="client"
+        />
+      );
+
+      const navButtons = screen.getAllByRole("button").map((b) => b.textContent || "");
+      const comeceIdx = navButtons.findIndex((t) => t.includes("Comece Aqui"));
+      const bussolaIdx = navButtons.findIndex((t) => t.includes("Minha Bússola"));
+      expect(comeceIdx).toBeGreaterThan(-1);
+      expect(bussolaIdx).toBeGreaterThan(comeceIdx);
+    });
   });
 });

@@ -87,4 +87,29 @@ describe("GerarConviteModal Component", () => {
 
     expect(onCloseMock).toHaveBeenCalled();
   });
+
+  it("permite definir tempo de acesso (30 dias) ao gerar convite de aluno", async () => {
+    (api.post as any).mockResolvedValue({
+      token: "tk-30d",
+      role: "client",
+      role_label: "Aluno",
+      validity_type: "never",
+      expires_at: null,
+      access_days: 30,
+      invite_path: "/cadastro?token=tk-30d",
+    });
+
+    render(<GerarConviteModal isOpen={true} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("invite-access-days-30"));
+    fireEvent.click(screen.getByTestId("submit-generate-invite-btn"));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith("/admin/invites", {
+        role: "client",
+        validity_type: "never",
+        access_days: 30,
+      });
+    });
+  });
 });

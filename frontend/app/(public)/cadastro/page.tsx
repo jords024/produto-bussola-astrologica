@@ -151,7 +151,7 @@ function CadastroContent() {
     }
   };
 
-  // Reenviar código via Brevo
+  // Reenviar e-mail de confirmação via Brevo
   const handleResendCode = async () => {
     setResending(true);
     try {
@@ -159,9 +159,9 @@ function CadastroContent() {
         token,
         email: email.trim().toLowerCase(),
       });
-      toast.success("Novo código de verificação enviado para o seu e-mail!");
+      toast.success("Um novo e-mail de confirmação foi enviado!");
     } catch (err: any) {
-      const msg = err.response?.data?.detail || "Erro ao reenviar código de verificação.";
+      const msg = err.response?.data?.detail || "Erro ao reenviar e-mail de confirmação.";
       toast.error(msg);
     } finally {
       setResending(false);
@@ -354,7 +354,7 @@ function CadastroContent() {
               {submitting ? (
                 <>
                   <span className="animate-spin">⏳</span>
-                  <span>Enviando código de verificação...</span>
+                  <span>Enviando e-mail de confirmação...</span>
                 </>
               ) : (
                 <span>Finalizar Cadastro</span>
@@ -362,72 +362,32 @@ function CadastroContent() {
             </button>
           </form>
         ) : (
-          /* ETAPA 2: Validação de Código OTP de 6 dígitos */
-          <form onSubmit={handleVerifyCode} className="space-y-5 text-center">
+          /* ETAPA 2: Aguardando clique no botão enviado por e-mail */
+          <div data-testid="email-link-sent-box" className="space-y-5 text-center">
             <div
-              className="p-4 rounded-2xl border text-xs space-y-2 text-left"
+              className="p-5 rounded-2xl border text-xs space-y-3 text-left"
               style={{
                 background: "rgba(127, 119, 221, 0.08)",
                 borderColor: "rgba(127, 119, 221, 0.25)",
               }}
             >
-              <div className="flex items-center gap-2 text-purple-300 font-semibold">
+              <div className="flex items-center gap-2 text-purple-300 font-semibold text-sm">
                 <span>✉️</span>
-                <span>Código enviado via Brevo</span>
+                <span>Confirmação enviada para o seu e-mail</span>
               </div>
               <p className="text-slate-300 leading-relaxed">
-                Enviamos um código de verificação de 6 dígitos para o e-mail:{" "}
+                Enviamos um e-mail com um botão de confirmação para:{" "}
                 <strong className="text-white font-mono">{email}</strong>.
               </p>
+              <p className="text-slate-300 leading-relaxed">
+                Abra sua caixa de entrada e clique no botão{" "}
+                <strong className="text-purple-200">Confirmar Meu E-mail e Ativar Conta</strong>{" "}
+                para validar seu e-mail e concluir seu cadastro.
+              </p>
               <p className="text-[11px] text-amber-300">
-                ⏱️ O código é válido por 15 minutos. Verifique também sua caixa de spam.
+                ⏱️ O botão de confirmação é válido por 15 minutos. Verifique também sua caixa de spam.
               </p>
             </div>
-
-            <div className="space-y-2 text-left">
-              <label className="text-xs font-medium text-slate-300 block">
-                Digite o Código de 6 Dígitos *
-              </label>
-              <input
-                type="text"
-                required
-                maxLength={6}
-                inputMode="numeric"
-                data-testid="input-verification-code"
-                autoComplete="one-time-code"
-                placeholder="123456"
-                value={verificationCode}
-                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
-                className="w-full text-center text-2xl font-mono tracking-[8px] py-3 rounded-xl outline-none focus:border-purple-400 transition-all"
-                style={{
-                  ...inputStyle,
-                  letterSpacing: "8px",
-                  fontWeight: "bold",
-                  color: "#EF9F27",
-                }}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={submitting || verificationCode.trim().length !== 6}
-              data-testid="submit-verify-code-btn"
-              className="w-full py-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg hover:brightness-110 active:scale-95 disabled:opacity-50"
-              style={{
-                background: "linear-gradient(135deg, #7F77DD, #534ab3)",
-                color: "#ffffff",
-                boxShadow: "0 0 15px rgba(127, 119, 221, 0.4)",
-              }}
-            >
-              {submitting ? (
-                <>
-                  <span className="animate-spin">⏳</span>
-                  <span>Validando e criando conta...</span>
-                </>
-              ) : (
-                <span>Confirmar Código e Concluir Cadastro</span>
-              )}
-            </button>
 
             <div className="flex items-center justify-between text-xs pt-2">
               <button
@@ -446,10 +406,10 @@ function CadastroContent() {
                 onClick={handleResendCode}
                 className="text-purple-300 hover:text-purple-200 transition-colors cursor-pointer font-semibold disabled:opacity-50"
               >
-                {resending ? "Reenviando..." : "Reenviar código"}
+                {resending ? "Reenviando..." : "Reenviar e-mail de confirmação"}
               </button>
             </div>
-          </form>
+          </div>
         )}
       </div>
     </div>

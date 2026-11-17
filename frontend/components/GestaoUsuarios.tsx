@@ -24,6 +24,10 @@ export interface PanelUser {
   created_at?: string;
   sun_sign?: string;
   birth_city?: string;
+  access_expires_at?: string | null;
+  access_expired?: boolean;
+  allow_multiple_profiles?: boolean;
+  max_extra_profiles?: number | null;
 }
 
 export default function GestaoUsuarios() {

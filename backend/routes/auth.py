@@ -11,6 +11,8 @@ import os
 
 from models.models import User
 from database import get_db
+from services.access_service import is_user_access_expired, format_access_expires_at
+from services.profile_service import get_max_extra_profiles, user_can_create_multiple_profiles
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -19,7 +21,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 JWT_SECRET = os.getenv("JWT_SECRET", "changeme-secret")
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", 168))
+JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", 72))
 
 
 class LoginRequest(BaseModel):
@@ -215,6 +217,10 @@ def me(current_user: User = Depends(get_current_user)):
         "sun_sign": current_user.sun_sign,
         "moon_sign": current_user.moon_sign,
         "rising_sign": current_user.rising_sign,
+        "access_expires_at": format_access_expires_at(current_user),
+        "access_expired": is_user_access_expired(current_user),
+        "allow_multiple_profiles": user_can_create_multiple_profiles(current_user),
+        "max_extra_profiles": get_max_extra_profiles(current_user),
     }
 
 

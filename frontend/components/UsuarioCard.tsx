@@ -130,6 +130,23 @@ export default function UsuarioCard({
                 👤 Você
               </span>
             )}
+
+            {/* Badge Tempo de Acesso (apenas Alunos com prazo) */}
+            {!isAdmin && u.access_expires_at && (
+              <span
+                data-testid={`badge-access-${u.id}`}
+                className="text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1"
+                style={{
+                  background: u.access_expired ? "rgba(244, 63, 94, 0.15)" : "rgba(239, 159, 39, 0.12)",
+                  color: u.access_expired ? "#fda4af" : "#fbbf24",
+                  border: `1px solid ${u.access_expired ? "rgba(244, 63, 94, 0.35)" : "rgba(239, 159, 39, 0.3)"}`,
+                }}
+              >
+                {u.access_expired
+                  ? "⏰ Acesso Expirado"
+                  : `⏳ Até ${new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(u.access_expires_at))}`}
+              </span>
+            )}
           </div>
 
           <div className="text-xs" style={{ color: "#8b87b8" }}>

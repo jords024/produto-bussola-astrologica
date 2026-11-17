@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 import { toast } from "@/components/Toast";
 import { PasswordInput } from "@/components/PasswordInput";
 import { CountryPhoneInput } from "@/components/CountryPhoneInput";
+import AccessExpirationSelector, { type AccessPreset } from "@/components/AccessExpirationSelector";
+import MultipleProfilesPermissionFields from "@/components/MultipleProfilesPermissionFields";
 
 interface CriarUsuarioModalProps {
   isOpen: boolean;
@@ -24,6 +26,11 @@ export default function CriarUsuarioModal({
   const [whatsapp, setWhatsapp] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"client" | "admin">("client");
+  const [accessPreset, setAccessPreset] = useState<AccessPreset>("lifetime");
+  const [customExpiresDate, setCustomExpiresDate] = useState("");
+  const [allowMultiple, setAllowMultiple] = useState(false);
+  const [unlimitedProfiles, setUnlimitedProfiles] = useState(true);
+  const [maxExtraProfiles, setMaxExtraProfiles] = useState("3");
   const [loading, setLoading] = useState(false);
 
   const hasMinLength = password.length >= 12;
@@ -45,6 +52,11 @@ export default function CriarUsuarioModal({
       setWhatsapp("");
       setPassword("");
       setRole("client");
+      setAccessPreset("lifetime");
+      setCustomExpiresDate("");
+      setAllowMultiple(false);
+      setUnlimitedProfiles(true);
+      setMaxExtraProfiles("3");
     }
   }, [isOpen]);
 
@@ -70,13 +82,29 @@ export default function CriarUsuarioModal({
 
     setLoading(true);
     try {
-      await api.post("/admin/users", {
+      const payload: Record<string, any> = {
         name: name.trim(),
         email: email.trim().toLowerCase(),
         whatsapp: whatsapp.trim() || null,
         password,
         role,
-      });
+      };
+      if (role === "client") {
+        if (accessPreset === "custom" && customExpiresDate) {
+          payload.access_expires_at = customExpiresDate;
+        } else if (accessPreset !== "lifetime" && accessPreset !== "custom") {
+          payload.access_days = Number(accessPreset);
+        }
+        if (allowMultiple) {
+          payload.allow_multiple_profiles = true;
+          payload.unlimited_extra_profiles = unlimitedProfiles;
+          if (!unlimitedProfiles) {
+            payload.max_extra_profiles = Math.max(1, Number(maxExtraProfiles) || 1);
+          }
+        }
+      }
+
+      await api.post("/admin/users", payload);
 
       toast.success("Usuário criado com sucesso!");
       onUserCreated();
@@ -260,6 +288,24 @@ export default function CriarUsuarioModal({
               </button>
             </div>
           </div>
+
+          <AccessExpirationSelector
+            role={role}
+            preset={accessPreset}
+            customDate={customExpiresDate}
+            onChangePreset={setAccessPreset}
+            onChangeCustomDate={setCustomExpiresDate}
+          />
+
+          <MultipleProfilesPermissionFields
+            role={role}
+            allowMultiple={allowMultiple}
+            onAllowChange={setAllowMultiple}
+            unlimited={unlimitedProfiles}
+            onUnlimitedChange={setUnlimitedProfiles}
+            maxLimit={maxExtraProfiles}
+            onMaxLimitChange={setMaxExtraProfiles}
+          />
 
           <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
             <button

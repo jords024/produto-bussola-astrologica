@@ -40,6 +40,9 @@ class User(Base):
     role = Column(String, default="client")
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
+    access_expires_at = Column(DateTime, nullable=True)
+    allow_multiple_profiles = Column(Boolean, default=False)
+    max_extra_profiles = Column(Integer, nullable=True)
     email_status = Column(String, default="not_sent")   # not_sent | sent | failed
     email_sent_at = Column(DateTime, nullable=True)
 
@@ -105,6 +108,7 @@ class UserInvite(Base):
     role = Column(String, nullable=False, default="client")
     validity_type = Column(String, nullable=False, default="never")
     expires_at = Column(DateTime, nullable=True)
+    access_days = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
     is_used = Column(Boolean, nullable=False, default=False)
@@ -142,6 +146,33 @@ class BackupConfig(Base):
 
 
 
+class AstroProfile(Base):
+    """Perfis astrológicos extras cadastrados por um aluno/admin autorizado."""
+    __tablename__ = "astro_profiles"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    owner_user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    relationship_label = Column(String, default="")
+    birth_date = Column(Date, nullable=False)
+    birth_time = Column(Time, nullable=True)
+    birth_city = Column(String, nullable=False)
+    birth_state = Column(String, default="")
+    birth_country = Column(String, default="Brasil")
+    tz_str = Column(String, default="America/Sao_Paulo")
+    lat = Column(Float, nullable=True)
+    lng = Column(Float, nullable=True)
+    sun_sign = Column(String, nullable=True)
+    moon_sign = Column(String, nullable=True)
+    rising_sign = Column(String, nullable=True)
+    svg_content = Column(Text, nullable=True)
+    chart_data = Column(JSONB, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    owner = relationship("User")
+
+
 class Analise(Base):
     """Uma leitura de transitos para uma data escolhida pela pessoa.
 
@@ -153,6 +184,7 @@ class Analise(Base):
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True)
+    profile_id = Column(UUID(as_uuid=False), ForeignKey("astro_profiles.id"), nullable=True, index=True)
     data_alvo = Column(Date, nullable=False, index=True)
     posicoes = Column(JSONB)          # [{planeta, casa, signo, retrogrado, ate}]
     textos = Column(JSONB)            # {planeta: interpretacao}
@@ -171,3 +203,21 @@ class Analise(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+
+
+class TutorialLesson(Base):
+    """Aulas e tutoriais (vídeo ou texto) exibidos na aba Comece Aqui."""
+    __tablename__ = "tutorial_lessons"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    title = Column(String, nullable=False)
+    description = Column(Text, default="")
+    lesson_type = Column(String, nullable=False, default="video")  # video | text
+    video_source = Column(String, default="url")                   # upload | url
+    video_url = Column(Text, nullable=True)
+    text_content = Column(Text, default="")
+    duration = Column(String, default="")
+    sort_order = Column(Integer, default=0)
+    created_by_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

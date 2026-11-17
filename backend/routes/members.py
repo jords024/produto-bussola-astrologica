@@ -3,20 +3,22 @@ import logging
 from datetime import date, datetime, timedelta, time as dtime
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
-from models.models import User, Chart, ChartSection, Analise
+from models.models import User, Chart, ChartSection, Analise, AstroProfile
 from database import get_db
 from routes.auth import get_current_user
 from services.pdf_service import generate_pdf
 from services.podcast_service import generate_podcast
 from services.notebooklm_service import generate_notebooklm_podcast, _is_available as notebooklm_available
 from services.transit_service import AREAS
+from services.access_service import require_active_ai_access
 from services.analise_service import gerar_analise, sanitizar_pergunta
+from services.profile_service import resolve_birth_target
 from services.interpretacoes import interpretacao
 from services.ai_service import generate_transit_synthesis
 from services.astro_service import generate_birth_chart
@@ -39,7 +41,24 @@ def _get_chart(user: User, db: Session) -> Chart:
 
 
 @router.get("/chart")
-def get_chart(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_chart(
+    profile_id: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if profile_id:
+        _, profile = resolve_birth_target(current_user, db, profile_id)
+        return {
+            "svg": profile.svg_content,
+            "sun_sign": profile.sun_sign,
+            "moon_sign": profile.moon_sign,
+            "rising_sign": profile.rising_sign,
+            "status": "ready" if profile.svg_content else "pending",
+            "created_at": profile.created_at,
+            "profile_id": str(profile.id),
+            "profile_name": profile.name,
+        }
+
     chart = (
         db.query(Chart)
         .filter(Chart.user_id == current_user.id)
@@ -220,7 +239,16 @@ async def save_member_birth_data(
 
 
 @router.get("/sections")
-def list_sections(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_sections(
+    profile_id: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if profile_id:
+        _, profile = resolve_birth_target(current_user, db, profile_id)
+        sections_map = (profile.chart_data or {}).get("sections", {}) if isinstance(profile.chart_data, dict) else {}
+        return [{"section_key": k, "section_order": idx} for idx, k in enumerate(sections_map.keys())]
+
     chart = _get_chart(current_user, db)
     sections = (
         db.query(ChartSection)
@@ -247,16 +275,28 @@ _OLD_TO_NEW_KEY = {v: k for k, v in _NEW_TO_OLD_KEY.items()}
 @router.get("/sections/{section_key}")
 def get_section(
     section_key: str,
+    profile_id: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    chart = _get_chart(current_user, db)
-
     # Tenta primeiro com a chave nova, depois com a chave legada (clientes antigos)
     candidate_keys = [section_key]
     legacy_key = _NEW_TO_OLD_KEY.get(section_key)
     if legacy_key:
         candidate_keys.append(legacy_key)
+
+    if profile_id:
+        _, profile = resolve_birth_target(current_user, db, profile_id)
+        sections_map = (profile.chart_data or {}).get("sections", {}) if isinstance(profile.chart_data, dict) else {}
+        for ck in candidate_keys:
+            if ck in sections_map:
+                return {"section_key": section_key, "content": sections_map[ck]}
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Seção '{section_key}' não encontrada.",
+        )
+
+    chart = _get_chart(current_user, db)
 
     section = (
         db.query(ChartSection)
@@ -336,6 +376,7 @@ async def generate_user_podcast(
     Gera o podcast da alma do usuário — roteiro via GPT-4o + áudio via TTS dual-voice.
     Retorna MP3 pronto para reprodução/download.
     """
+    require_active_ai_access(current_user)
     chart = _get_chart(current_user, db)
     sections = (
         db.query(ChartSection)
@@ -436,6 +477,7 @@ class AnaliseRequest(BaseModel):
     # não do cadastro: pergunta guardada no perfil envelhece em duas semanas.
     area: Optional[str] = None
     pergunta: Optional[str] = None
+    profile_id: Optional[str] = None
 
     @field_validator("pergunta")
     @classmethod
@@ -503,10 +545,12 @@ async def criar_analise(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """A leitura da própria pessoa. A conta mora no serviço, que o painel usa também."""
+    """A leitura da própria pessoa ou de um perfil extra cadastrado por ela."""
+    require_active_ai_access(current_user)
     return await gerar_analise(
         user=current_user, db=db, data_alvo=body.data, data_fim=body.data_fim,
         area=body.area, pergunta=body.pergunta, forcar=body.forcar,
+        profile_id=body.profile_id,
     )
 
 
@@ -545,6 +589,8 @@ def listar_analises(
             "planeta_destaque": destaque,
             "status": a.status,
             "tem_sintese": bool(a.sintese),
+            "profile_id": str(a.profile_id) if getattr(a, "profile_id", None) else ctx.get("profile_id"),
+            "profile_name": ctx.get("profile_name"),
             "contexto": ctx,
             "created_at": a.created_at.isoformat() if a.created_at else None,
         })

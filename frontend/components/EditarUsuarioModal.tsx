@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { api } from "@/lib/api";
 import { toast } from "@/components/Toast";
+import AccessExpirationSelector, { type AccessPreset } from "@/components/AccessExpirationSelector";
+import MultipleProfilesPermissionFields from "@/components/MultipleProfilesPermissionFields";
 
 export interface UserToEdit {
   id: string;
@@ -13,6 +15,10 @@ export interface UserToEdit {
   role: string;
   is_active: boolean;
   is_super_admin?: boolean;
+  access_expires_at?: string | null;
+  access_expired?: boolean;
+  allow_multiple_profiles?: boolean;
+  max_extra_profiles?: number | null;
 }
 
 interface EditarUsuarioModalProps {
@@ -34,6 +40,11 @@ export default function EditarUsuarioModal({
   const [whatsapp, setWhatsapp] = useState("");
   const [role, setRole] = useState<"client" | "admin">("client");
   const [isActive, setIsActive] = useState(true);
+  const [accessPreset, setAccessPreset] = useState<AccessPreset>("lifetime");
+  const [customExpiresDate, setCustomExpiresDate] = useState("");
+  const [allowMultiple, setAllowMultiple] = useState(false);
+  const [unlimitedProfiles, setUnlimitedProfiles] = useState(true);
+  const [maxExtraProfiles, setMaxExtraProfiles] = useState("3");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -47,6 +58,21 @@ export default function EditarUsuarioModal({
       setWhatsapp(user.whatsapp || "");
       setRole(user.role === "admin" ? "admin" : "client");
       setIsActive(user.is_active ?? true);
+      if (user.access_expires_at) {
+        setAccessPreset("custom");
+        setCustomExpiresDate(user.access_expires_at.slice(0, 10));
+      } else {
+        setAccessPreset("lifetime");
+        setCustomExpiresDate("");
+      }
+      setAllowMultiple(Boolean(user.allow_multiple_profiles));
+      if (user.max_extra_profiles && user.max_extra_profiles > 0) {
+        setUnlimitedProfiles(false);
+        setMaxExtraProfiles(String(user.max_extra_profiles));
+      } else {
+        setUnlimitedProfiles(true);
+        setMaxExtraProfiles("3");
+      }
     }
   }, [user]);
 
@@ -79,6 +105,23 @@ export default function EditarUsuarioModal({
         role,
         is_active: isActive,
       };
+      if (role === "admin" || accessPreset === "lifetime") {
+        payload.clear_expiration = true;
+      } else if (accessPreset === "custom" && customExpiresDate) {
+        payload.access_expires_at = customExpiresDate;
+      } else if (accessPreset !== "custom") {
+        payload.access_days = Number(accessPreset);
+      }
+
+      if (role === "client") {
+        payload.allow_multiple_profiles = allowMultiple;
+        if (allowMultiple) {
+          payload.unlimited_extra_profiles = unlimitedProfiles;
+          if (!unlimitedProfiles) {
+            payload.max_extra_profiles = Math.max(1, Number(maxExtraProfiles) || 1);
+          }
+        }
+      }
 
       await api.put(`/admin/users/${user.id}`, payload);
       toast.success("Usuário atualizado com sucesso!");
@@ -299,6 +342,25 @@ export default function EditarUsuarioModal({
                 </button>
               </div>
             </div>
+
+            <AccessExpirationSelector
+              role={role}
+              preset={accessPreset}
+              customDate={customExpiresDate}
+              currentExpiresAt={user.access_expires_at}
+              onChangePreset={setAccessPreset}
+              onChangeCustomDate={setCustomExpiresDate}
+            />
+
+            <MultipleProfilesPermissionFields
+              role={role}
+              allowMultiple={allowMultiple}
+              onAllowChange={setAllowMultiple}
+              unlimited={unlimitedProfiles}
+              onUnlimitedChange={setUnlimitedProfiles}
+              maxLimit={maxExtraProfiles}
+              onMaxLimitChange={setMaxExtraProfiles}
+            />
 
             {/* Ações */}
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">

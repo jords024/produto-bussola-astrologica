@@ -13,6 +13,7 @@ import LeadQuestionnaire from "@/components/LeadQuestionnaire";
 import HistoricoPesquisas from "@/components/HistoricoPesquisas";
 import GestaoUsuarios from "@/components/GestaoUsuarios";
 import Financeiro from "@/components/Financeiro";
+import ComeceAqui from "@/components/ComeceAqui";
 import BackupAutomatico from "@/components/backup/BackupAutomatico";
 import GerenciamentoLogs from "@/components/GerenciamentoLogs";
 
@@ -21,7 +22,7 @@ export default function AdminPage() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [selectedClient, setSelectedClient] = useState<ClientDetail | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ name?: string; email?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ name?: string; email?: string; access_expired?: boolean; access_expires_at?: string | null } | null>(null);
   // null = ainda nao sabemos. Nada de gestao e desenhado antes de saber.
   const [papel, setPapel] = useState<string | null>(null);
   const [tutorialAberto, setTutorialAberto] = useState(false);
@@ -43,7 +44,7 @@ export default function AdminPage() {
       router.push("/admin/login");
       return;
     }
-    api.get<{ name: string; email: string; role?: string }>("/auth/me")
+    api.get<{ name: string; email: string; role?: string; access_expired?: boolean; access_expires_at?: string | null }>("/auth/me")
       .then((res) => {
         if (res && res.email) {
           setCurrentUser(res);
@@ -203,6 +204,8 @@ export default function AdminPage() {
                 ? "Sistema de Logs"
                 : activeTab === "financeiro"
                 ? "Financeiro"
+                : activeTab === "comece_aqui"
+                ? "Comece Aqui"
                 : "Gestão de Usuários"}
             </h1>
           </div>
@@ -224,8 +227,13 @@ export default function AdminPage() {
             <p className="text-sm" style={{ color: C.muted }}>Carregando...</p>
           )}
 
+          {/* Aba Comece Aqui (Compartilhada: Alunos visualizam, Admins gerenciam) */}
+          {papel !== null && activeTab === "comece_aqui" && (
+            <ComeceAqui isAdmin={papel === "admin"} />
+          )}
+
           {/* Visão do Aluno / Bússola Pessoal */}
-          {papel !== null && (papel !== "admin" || ["leitura", "bussola", "diario", "dados"].includes(activeTab)) && (
+          {papel !== null && activeTab !== "comece_aqui" && (papel !== "admin" || ["leitura", "bussola", "diario", "dados"].includes(activeTab)) && (
             <PainelAluno
               area={(
                 activeTab === "pesquisa" || activeTab === "leitura"
@@ -256,7 +264,7 @@ export default function AdminPage() {
           )}
 
           {/* Ferramentas Exclusivas de Gestão para Administradores */}
-          {papel === "admin" && !["leitura", "bussola", "diario", "dados"].includes(activeTab) && (<>
+          {papel === "admin" && !["comece_aqui", "leitura", "bussola", "diario", "dados"].includes(activeTab) && (<>
           {/* Aba Home / Cadastrar Mapa */}
           {activeTab === "home" && (
             <div className="w-full">

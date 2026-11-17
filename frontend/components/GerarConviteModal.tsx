@@ -25,6 +25,7 @@ export default function GerarConviteModal({
 }: GerarConviteModalProps) {
   const [role, setRole] = useState<"client" | "admin">("client");
   const [validity, setValidity] = useState<"never" | "24h" | "48h" | "72h">("never");
+  const [accessDays, setAccessDays] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [generatedInvite, setGeneratedInvite] = useState<GeneratedInviteData | null>(null);
   const [copied, setCopied] = useState(false);
@@ -43,6 +44,7 @@ export default function GerarConviteModal({
       const data = await api.post("/admin/invites", {
         role,
         validity_type: validity,
+        ...(role === "client" && accessDays ? { access_days: accessDays } : {}),
       });
 
       setGeneratedInvite(data);
@@ -224,6 +226,42 @@ export default function GerarConviteModal({
                 })}
               </div>
             </div>
+
+            {/* 3. Tempo de Acesso à Plataforma (apenas Aluno) */}
+            {role === "client" && (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wider block" style={{ color: "#8b87b8" }}>
+                  3. Tempo de Acesso do Aluno (IA)
+                </label>
+                <div className="grid grid-cols-5 gap-2">
+                  {[
+                    { value: null, label: "Vitalício" },
+                    { value: 7, label: "7 dias" },
+                    { value: 30, label: "30 dias" },
+                    { value: 90, label: "90 dias" },
+                    { value: 365, label: "1 ano" },
+                  ].map((opt) => {
+                    const selected = accessDays === opt.value;
+                    return (
+                      <button
+                        key={String(opt.value)}
+                        type="button"
+                        data-testid={`invite-access-days-${opt.value ?? "lifetime"}`}
+                        onClick={() => setAccessDays(opt.value)}
+                        className="p-2 rounded-xl border text-center text-xs font-semibold transition-all cursor-pointer"
+                        style={{
+                          background: selected ? "rgba(52, 211, 153, 0.16)" : "rgba(255, 255, 255, 0.03)",
+                          borderColor: selected ? "rgba(52, 211, 153, 0.6)" : "rgba(127, 119, 221, 0.2)",
+                          color: selected ? "#34d399" : "#8b87b8",
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Botão de Submissão */}
             <div className="pt-2 flex items-center justify-end gap-3">

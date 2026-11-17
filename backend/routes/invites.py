@@ -2,6 +2,8 @@ import os
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, List
+import jwt
+from jwt.exceptions import PyJWTError as JWTError
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -9,8 +11,8 @@ from sqlalchemy import func, desc
 
 from database import get_db
 from models.models import User, UserInvite, RegistrationVerification
-from routes.auth import require_admin, get_admin_or_api_key, hash_password, create_token
-from services.brevo_service import send_brevo_verification_code
+from routes.auth import require_admin, get_admin_or_api_key, hash_password, create_token, JWT_SECRET, JWT_ALGORITHM
+from services.brevo_service import send_brevo_verification_code, send_brevo_verification_link
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,6 +23,7 @@ router = APIRouter(tags=["invites"])
 class CreateInviteRequest(BaseModel):
     role: str = Field(..., description="'client' para Aluno ou 'admin' para Administrador")
     validity_type: str = Field("never", description="'never', '24h', '48h', '72h'")
+    access_days: Optional[int] = Field(None, description="Dias de acesso à plataforma após o cadastro (None = vitalício)")
 
 
 class RegisterWithInviteRequest(BaseModel):
@@ -54,11 +57,14 @@ def create_invite(
 
     token = secrets.token_urlsafe(32)
 
+    access_days = body.access_days if (role == "client" and body.access_days and body.access_days > 0) else None
+
     invite = UserInvite(
         token=token,
         role=role,
         validity_type=validity,
         expires_at=expires_at,
+        access_days=access_days,
         created_at=now,
         created_by_id=current_user.id,
         is_used=False,
@@ -79,6 +85,7 @@ def create_invite(
         "role_label": "Administrador" if invite.role == "admin" else "Aluno",
         "validity_type": invite.validity_type,
         "expires_at": invite.expires_at.isoformat() + "Z" if invite.expires_at else None,
+        "access_days": invite.access_days,
         "created_at": invite.created_at.isoformat() + "Z",
         "invite_path": invite_path,
         "invite_url": f"{base_url}{invite_path}",
@@ -134,6 +141,7 @@ def list_invites(
             "role_label": "Administrador" if inv.role == "admin" else "Aluno",
             "validity_type": inv.validity_type,
             "expires_at": inv.expires_at.isoformat() + "Z" if inv.expires_at else None,
+            "access_days": inv.access_days,
             "created_at": inv.created_at.isoformat() + "Z",
             "is_used": inv.is_used,
             "used_at": inv.used_at.isoformat() + "Z" if inv.used_at else None,
@@ -217,6 +225,71 @@ class ResendRegisterCodeRequest(BaseModel):
     email: str
 
 
+class VerifyRegisterLinkRequest(BaseModel):
+    token: str
+
+
+def _build_email_verification_token(verification_id: str, email: str, invite_token: str) -> str:
+    payload = {
+        "purpose": "email_verification",
+        "vid": str(verification_id),
+        "email": email,
+        "invite_token": invite_token,
+        "exp": datetime.utcnow() + timedelta(minutes=15),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def _build_confirm_url(verification_token: str) -> str:
+    base_url = (
+        os.getenv("FRONTEND_URL")
+        or os.getenv("DASHBOARD_URL")
+        or "http://localhost:3000"
+    ).strip().rstrip("/")
+    return f"{base_url}/cadastro/confirmar?token={verification_token}"
+
+
+def _finalize_verified_registration(db: Session, invite: UserInvite, verification: RegistrationVerification) -> dict:
+    now = datetime.utcnow()
+    access_expires = (
+        now + timedelta(days=invite.access_days)
+        if invite.role == "client" and invite.access_days and invite.access_days > 0
+        else None
+    )
+
+    new_user = User(
+        name=verification.name,
+        email=verification.email,
+        whatsapp=verification.whatsapp,
+        password_hash=verification.password_hash,
+        role=invite.role,
+        is_active=True,
+        access_expires_at=access_expires,
+    )
+    db.add(new_user)
+    db.flush()
+
+    invite.is_used = True
+    invite.used_at = now
+    invite.used_by_id = new_user.id
+
+    clean_email = verification.email
+    db.delete(verification)
+    db.commit()
+
+    logger.info(f"Conta verificada e criada com sucesso: {clean_email} com role {new_user.role}")
+    jwt_token = create_token(new_user.id, new_user.role)
+
+    return {
+        "success": True,
+        "token": jwt_token,
+        "role": new_user.role,
+        "name": new_user.name,
+        "email": new_user.email,
+        "message": "Conta verificada e criada com sucesso! Seja bem-vindo(a).",
+    }
+
+
 @router.post("/auth/request-register-code")
 def request_register_code(
     body: RegisterWithInviteRequest,
@@ -289,15 +362,18 @@ def request_register_code(
     )
     db.add(verification)
     db.commit()
+    db.refresh(verification)
 
-    # Dispara e-mail via API Brevo
-    send_brevo_verification_code(to_email=clean_email, name=clean_name, code=code)
+    # Gera link com botão de confirmação e dispara via API Brevo
+    verif_token = _build_email_verification_token(verification.id, clean_email, body.token)
+    confirm_url = _build_confirm_url(verif_token)
+    send_brevo_verification_link(to_email=clean_email, name=clean_name, confirm_url=confirm_url)
 
-    logger.info(f"Código de verificação gerado para o e-mail: {clean_email}")
+    logger.info(f"E-mail de confirmação gerado para: {clean_email}")
 
     return {
         "success": True,
-        "message": "Código de verificação enviado para o seu e-mail.",
+        "message": "E-mail de confirmação enviado! Clique no botão enviado para o seu e-mail.",
         "email": clean_email,
     }
 
@@ -350,40 +426,62 @@ def verify_register_code(
             detail="O código de verificação expirou. Por favor, solicite um novo código.",
         )
 
-    # Cria o novo usuário no sistema
-    new_user = User(
-        name=verification.name,
-        email=verification.email,
-        whatsapp=verification.whatsapp,
-        password_hash=verification.password_hash,
-        role=invite.role,
-        is_active=True,
+    return _finalize_verified_registration(db, invite, verification)
+
+
+@router.post("/auth/verify-register-link")
+def verify_register_link(
+    body: VerifyRegisterLinkRequest,
+    db: Session = Depends(get_db),
+):
+    """Valida o botão/link de confirmação recebido por e-mail e cria a conta do usuário."""
+    try:
+        payload = jwt.decode(body.token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Link de confirmação inválido ou expirado. Solicite um novo e-mail.",
+        )
+
+    if payload.get("purpose") != "email_verification":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token inválido.")
+
+    vid = payload.get("vid")
+    clean_email = (payload.get("email") or "").strip().lower()
+    invite_token = payload.get("invite_token")
+
+    invite = db.query(UserInvite).filter(UserInvite.token == invite_token).first()
+    if not invite or invite.is_used:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Este link de convite é inválido ou já foi utilizado.",
+        )
+    if invite.expires_at and invite.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Este link de convite expirou.")
+
+    verification = (
+        db.query(RegistrationVerification)
+        .filter(RegistrationVerification.id == vid, RegistrationVerification.email == clean_email)
+        .first()
     )
-    db.add(new_user)
-    db.flush()
+    if not verification:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solicitação de confirmação não encontrada ou já utilizada.",
+        )
+    if verification.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="O link de confirmação expirou. Solicite um novo e-mail.",
+        )
 
-    # Marca o convite como utilizado
-    invite.is_used = True
-    invite.used_at = datetime.utcnow()
-    invite.used_by_id = new_user.id
+    if db.query(User).filter(func.lower(User.email) == clean_email).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Este e-mail já foi confirmado e cadastrado.",
+        )
 
-    # Remove o registro de verificação
-    db.delete(verification)
-    db.commit()
-
-    logger.info(f"Conta verificada e criada com sucesso: {clean_email} com role {new_user.role}")
-
-    # Gera token JWT de autenticação
-    jwt_token = create_token(new_user.id, new_user.role)
-
-    return {
-        "success": True,
-        "token": jwt_token,
-        "role": new_user.role,
-        "name": new_user.name,
-        "email": new_user.email,
-        "message": "Conta verificada e criada com sucesso! Seja bem-vindo(a).",
-    }
+    return _finalize_verified_registration(db, invite, verification)
 
 
 @router.post("/auth/resend-register-code")
@@ -414,18 +512,19 @@ def resend_register_code(
             detail="Nenhum cadastro pendente encontrado para este e-mail. Preencha o formulário novamente.",
         )
 
-    # Gera novo código
+    # Gera novo link de confirmação
     new_code = f"{secrets.randbelow(900000) + 100000}"
     verification.code = new_code
     verification.expires_at = datetime.utcnow() + timedelta(minutes=15)
     db.commit()
 
-    # Dispara e-mail via API Brevo
-    send_brevo_verification_code(to_email=clean_email, name=verification.name, code=new_code)
+    verif_token = _build_email_verification_token(verification.id, clean_email, body.token)
+    confirm_url = _build_confirm_url(verif_token)
+    send_brevo_verification_link(to_email=clean_email, name=verification.name, confirm_url=confirm_url)
 
     return {
         "success": True,
-        "message": "Um novo código de verificação foi enviado para seu e-mail.",
+        "message": "Um novo e-mail de confirmação foi enviado.",
         "email": clean_email,
     }
 
@@ -479,6 +578,12 @@ def register_with_invite(
         )
 
     # Cria o novo usuário respeitando o papel definido no convite
+    access_expires = (
+        datetime.utcnow() + timedelta(days=invite.access_days)
+        if invite.role == "client" and invite.access_days and invite.access_days > 0
+        else None
+    )
+
     new_user = User(
         name=clean_name,
         email=clean_email,
@@ -486,6 +591,7 @@ def register_with_invite(
         password_hash=hash_password(body.password),
         role=invite.role,
         is_active=True,
+        access_expires_at=access_expires,
     )
     db.add(new_user)
     db.flush()

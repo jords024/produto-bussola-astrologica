@@ -117,4 +117,92 @@ describe("Financeiro Component", () => {
     expect(screen.getByTestId("financeiro-start-date")).toBeDefined();
     expect(screen.getByTestId("financeiro-end-date")).toBeDefined();
   });
+
+  it("permite filtrar por papel (Alunos / Admins) e ordenar usuários", async () => {
+    render(<Financeiro />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("role-btn-client")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId("role-btn-client"));
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/admin/financeiro?period=all&role=client");
+    });
+
+    fireEvent.change(screen.getByTestId("financeiro-sort-select"), {
+      target: { value: "newest" },
+    });
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/admin/financeiro?period=all&role=client&sort=newest");
+    });
+  });
+
+  it("abre o popup de relatórios ao clicar em um usuário da lista", async () => {
+    (api.get as any).mockImplementation((url: string) => {
+      if (url.startsWith("/admin/financeiro/user-reports")) {
+        return Promise.resolve({
+          user: { user_id: "u1", name: "Maria Silva", email: "maria@exemplo.com", role: "client" },
+          period: "all",
+          sort: "newest",
+          readings: [],
+          maps: [],
+        });
+      }
+      return Promise.resolve(mockResponse);
+    });
+
+    render(<Financeiro />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("financeiro-user-row-0")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId("financeiro-user-row-0"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeDefined();
+      expect(api.get).toHaveBeenCalledWith(
+        expect.stringContaining("/admin/financeiro/user-reports?period=all&sort=newest&user_id=u1")
+      );
+    });
+  });
+
+  it("pagina a lista de usuários de 10 em 10 usando PaginationControls", async () => {
+    const manyUsers = Array.from({ length: 12 }, (_, idx) => ({
+      user_id: `u-${idx + 1}`,
+      name: `Usuário ${idx + 1}`,
+      email: `user${idx + 1}@exemplo.com`,
+      role: "client",
+      maps_count: 1,
+      readings_count: 1,
+      prompt_tokens: 100,
+      completion_tokens: 100,
+      total_tokens: 200,
+      cost_usd: 0.05,
+      cost_brl: 0.28,
+    }));
+
+    (api.get as any).mockResolvedValue({
+      ...mockResponse,
+      users: manyUsers,
+    });
+
+    render(<Financeiro />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Usuário 1")).toBeDefined();
+      expect(screen.getByText("Usuário 10")).toBeDefined();
+      expect(screen.queryByText("Usuário 11")).toBeNull();
+      expect(screen.getByTestId("pagination-controls")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId("next-page-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Usuário 11")).toBeDefined();
+      expect(screen.getByText("Usuário 12")).toBeDefined();
+      expect(screen.queryByText("Usuário 1")).toBeNull();
+    });
+  });
 });

@@ -21,6 +21,7 @@ import ChartZoomModal from "@/components/ChartZoomModal";
 import Ajuda from "@/components/Ajuda";
 import ColetaDadosBussola from "@/components/ColetaDadosBussola";
 import PainelDiarioTab from "@/components/aluno/PainelDiarioTab";
+import AstroProfileSelector from "@/components/AstroProfileSelector";
 
 const C = {
   bg: "#0f0b1e",
@@ -116,9 +117,10 @@ export default function PainelAluno({
   onIrPara,
 }: {
   area: AreaAluno;
-  usuario: { name?: string; email?: string } | null;
+  usuario: { name?: string; email?: string; access_expired?: boolean; access_expires_at?: string | null } | null;
   onIrPara: (a: AreaAluno) => void;
 }) {
+  const accessExpired = Boolean(usuario?.access_expired);
   const [mapa, setMapa] = useState<Mapa | null>(null);
   const [diario, setDiario] = useState<ItemDiario[]>([]);
   const [zoom, setZoom] = useState(false);
@@ -128,11 +130,14 @@ export default function PainelAluno({
   const [filtroTipo, setFiltroTipo] = useState<"todos" | "perguntas" | "periodos">("todos");
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [deletandoId, setDeletandoId] = useState<string | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [selectedProfileName, setSelectedProfileName] = useState("");
 
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
-      setMapa(await api.get<Mapa>("/members/chart"));
+      const chartUrl = selectedProfileId ? `/members/chart?profile_id=${encodeURIComponent(selectedProfileId)}` : "/members/chart";
+      setMapa(await api.get<Mapa>(chartUrl));
     } catch {
       setMapa(null); // sem mapa ainda: a tela explica o que falta
     }
@@ -142,7 +147,7 @@ export default function PainelAluno({
       setDiario([]);
     }
     setCarregando(false);
-  }, []);
+  }, [selectedProfileId]);
 
   const handleExcluirDoDiario = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -193,13 +198,13 @@ export default function PainelAluno({
   if (area === "bussola") {
     return (
       <div className="w-full max-w-5xl">
-        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold" style={{ color: "#ffffff" }}>
-              {nomeExibido ? `A bússola do ${nomeExibido}` : "A sua bússola"}
+              {selectedProfileName ? `A bússola de ${selectedProfileName}` : nomeExibido ? `A bússola do ${nomeExibido}` : "A sua bússola"}
             </h2>
             <p className="text-sm mt-2 leading-relaxed" style={{ color: C.muted }}>
-              Este é o céu do minuto em que você nasceu. Ele não muda nunca, e é
+              Este é o céu do minuto em que {selectedProfileName || "você"} nasceu. Ele não muda nunca, e é
               contra ele que toda leitura de data é calculada.
             </p>
           </div>
@@ -211,6 +216,18 @@ export default function PainelAluno({
               ⚙️ Editar Meus Dados
             </button>
           )}
+        </div>
+
+        <div className="mb-6">
+          <AstroProfileSelector
+            ownerName={usuario?.name}
+            selectedProfileId={selectedProfileId}
+            onChange={(id, pName) => {
+              setSelectedProfileId(id);
+              setSelectedProfileName(pName || "");
+            }}
+            label="Visualizar bússola de:"
+          />
         </div>
 
         {carregando ? (
@@ -324,6 +341,7 @@ export default function PainelAluno({
           nome={usuario?.name}
           analiseIdInicial={analiseIdParaAbrir}
           onAnaliseGerada={carregar}
+          accessExpired={accessExpired}
         />
       </div>
     );

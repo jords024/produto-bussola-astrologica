@@ -4,16 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import Ajuda from "@/components/Ajuda";
 import AnaliseResultado from "@/components/analise/AnaliseResultado";
+import AstroProfileSelector from "@/components/AstroProfileSelector";
+import HistoricoConsultaModal from "@/components/analise/HistoricoConsultaModal";
+import HistoricoCompletoModal from "@/components/analise/HistoricoCompletoModal";
+import HistoricoChipsBar from "@/components/analise/HistoricoChipsBar";
+import AnaliseLoadingCard from "@/components/analise/AnaliseLoadingCard";
 import {
-  T,
-  ETAPAS_LOADING,
-  sanitizarEntradaTexto,
-  hoje,
-  somaDias,
-  porExtenso,
-  curta,
-  type Analise,
-  type ItemHistorico,
+  T, sanitizarEntradaTexto, hoje, somaDias, porExtenso, curta, type Analise, type ItemHistorico,
 } from "@/components/analise/analiseConstants";
 
 export default function AnaliseDoDia({
@@ -21,11 +18,13 @@ export default function AnaliseDoDia({
   analiseIdInicial,
   dataInicial,
   onAnaliseGerada,
+  accessExpired = false,
 }: {
   nome?: string;
   analiseIdInicial?: string | null;
   dataInicial?: string | null;
   onAnaliseGerada?: () => void;
+  accessExpired?: boolean;
 }) {
   const [modo, setModo] = useState<"dia" | "periodo">("dia");
   const [data, setData] = useState(dataInicial || hoje());
@@ -39,6 +38,9 @@ export default function AnaliseDoDia({
   const [etapaLoading, setEtapaLoading] = useState(0);
   const [erro, setErro] = useState("");
   const [zoom, setZoom] = useState(false);
+  const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [previewHistorico, setPreviewHistorico] = useState<ItemHistorico | null>(null);
+  const [historicoCompletoAberto, setHistoricoCompletoAberto] = useState(false);
 
   const carregarHistorico = useCallback(async () => {
     try {
@@ -105,6 +107,7 @@ export default function AnaliseDoDia({
         data: dia,
         area: area || undefined,
         pergunta: pergunta.trim() || undefined,
+        profile_id: selectedProfileId || undefined,
       };
       const fimEfetivo = fimOpcional !== undefined ? fimOpcional : (modo === "periodo" ? dataFim : undefined);
       if (fimEfetivo && fimEfetivo > dia) {
@@ -125,7 +128,32 @@ export default function AnaliseDoDia({
     } finally {
       setCarregando(false);
     }
-  }, [carregarHistorico, onAnaliseGerada, area, pergunta, modo, dataFim]);
+  }, [carregarHistorico, onAnaliseGerada, area, pergunta, modo, dataFim, selectedProfileId]);
+
+  const abrirDoHistorico = useCallback(async (item: ItemHistorico) => {
+    setCarregando(true);
+    setErro("");
+    try {
+      const a = await api.get<Analise>(`/members/analises/${item.id}`);
+      setAnalise(a);
+      setData(a.data);
+      if (a.data_fim) {
+        setDataFim(a.data_fim);
+        setModo("periodo");
+      } else {
+        setModo("dia");
+      }
+      setArea(a.contexto?.area || "");
+      setPergunta(a.contexto?.pergunta || "");
+      setSelectedProfileId(item.profile_id || item.contexto?.profile_id || "");
+      setPreviewHistorico(null);
+      setHistoricoCompletoAberto(false);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível carregar essa leitura salva.");
+    } finally {
+      setCarregando(false);
+    }
+  }, []);
 
   const aplicarAtalhoPeriodo = (dias: number) => {
     const base = data || hoje();
@@ -238,7 +266,8 @@ export default function AnaliseDoDia({
         </div>
 
         {/* Datas */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+        <div className="mt-4"><AstroProfileSelector ownerName={nome} selectedProfileId={selectedProfileId} onChange={(id) => setSelectedProfileId(id)} label="Gerar leitura para:" /></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
           <div className={modo === "dia" ? "sm:col-span-2" : ""}>
             <label
               htmlFor="data-analise"
@@ -358,7 +387,7 @@ export default function AnaliseDoDia({
           <button
             type="button"
             onClick={() => gerar(data, modo === "periodo" ? dataFim : null)}
-            disabled={carregando || !data}
+            disabled={carregando || !data || accessExpired}
             className="px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-50 hover:brightness-110 active:scale-[0.98]"
             style={{
               background: `linear-gradient(135deg, ${T.gold}, #b88628)`,
@@ -373,58 +402,16 @@ export default function AnaliseDoDia({
               : "Ver Leitura do Dia"}
           </button>
         </div>
+        {accessExpired && (
+          <div data-testid="access-expired-banner" className="mt-4 p-4 rounded-xl border border-rose-500/40 bg-rose-500/10 text-rose-200 text-xs sm:text-sm space-y-1">
+            <p className="font-bold">⏰ Sua conta expirou</p>
+            <p className="text-rose-200/85">Seu tempo de acesso à plataforma terminou. Converse com o suporte para ativar novamente a sua conta.</p>
+          </div>
+        )}
       </div>
 
       {/* ── Loading State de Precisão ────────────────────────────────────── */}
-      {carregando && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="mt-6 p-6 sm:p-8 rounded-2xl relative overflow-hidden"
-          style={{
-            background: T.surface1,
-            border: `1px solid ${T.borderGold}`,
-            boxShadow: "0 12px 48px rgba(0,0,0,0.6)",
-          }}
-        >
-          <div className="flex flex-col sm:flex-row items-center gap-6">
-            <div className="relative w-16 h-16 flex items-center justify-center flex-shrink-0">
-              <div
-                className="absolute inset-0 rounded-full border border-dashed border-white/20 animate-spin"
-                style={{ animationDuration: "10s" }}
-              />
-              <div
-                className="absolute inset-2 rounded-full border-2 border-transparent border-t-[#E2B857] animate-spin"
-                style={{ animationDuration: "3s" }}
-              />
-              <span className="text-xl" style={{ color: T.gold }}>
-                ☉
-              </span>
-            </div>
-
-            <div className="flex-1 text-center sm:text-left">
-              <div className="flex items-center justify-center sm:justify-start gap-2 mb-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#E2B857] animate-pulse" />
-                <span className="text-[10px] font-mono uppercase tracking-[0.2em]" style={{ color: T.gold }}>
-                  Processamento Tático em Tempo Real
-                </span>
-              </div>
-              <p className="text-base font-semibold text-white">
-                {ETAPAS_LOADING[etapaLoading]}
-              </p>
-              <div className="mt-3.5 h-1 w-full rounded-full overflow-hidden bg-white/10">
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    width: `${Math.min(95, ((etapaLoading + 1) / ETAPAS_LOADING.length) * 95)}%`,
-                    background: `linear-gradient(90deg, #6366F1, ${T.gold})`,
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {carregando && <AnaliseLoadingCard etapaLoading={etapaLoading} />}
 
       {/* Erro */}
       {erro && (
@@ -436,34 +423,34 @@ export default function AnaliseDoDia({
         </div>
       )}
 
-      {/* ── Histórico em Micro-Chips ────────────────────────────────────── */}
-      {historico.length > 0 && (
-        <div className="mt-6">
-          <p className="text-[11px] font-mono uppercase tracking-wider mb-2.5" style={{ color: T.textMuted }}>
-            Histórico de Consultas
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {historico.map((h) => {
-              const fimHist = h.data_fim || h.contexto?.data_fim || null;
-              const ativo = analise?.data === h.data && (analise?.data_fim || null) === fimHist;
-              return (
-                <button
-                  key={h.id}
-                  onClick={() => gerar(h.data, fimHist)}
-                  className="px-3 py-1 rounded-lg text-xs font-mono transition-all hover:border-white/30"
-                  style={{
-                    background: ativo ? T.surface3 : T.surface1,
-                    color: ativo ? "#ffffff" : T.textMuted,
-                    border: `1px solid ${ativo ? T.gold : T.border}`,
-                  }}
-                >
-                  {fimHist ? `${curta(h.data)} → ${curta(fimHist)}` : curta(h.data)}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* ── Histórico em Micro-Chips (Máx. 6 recentes + Ver Todo o Histórico) ── */}
+      <HistoricoChipsBar
+        historico={historico}
+        selectedProfileId={selectedProfileId}
+        analise={analise}
+        onSelectChip={setPreviewHistorico}
+        onOpenAll={() => setHistoricoCompletoAberto(true)}
+      />
+
+      <HistoricoConsultaModal
+        item={previewHistorico}
+        ownerName={nome}
+        areas={areas}
+        loading={carregando}
+        onClose={() => setPreviewHistorico(null)}
+        onConfirmOpen={abrirDoHistorico}
+      />
+
+      <HistoricoCompletoModal
+        isOpen={historicoCompletoAberto}
+        items={historico}
+        ownerName={nome}
+        areas={areas}
+        loading={carregando}
+        activeAnaliseId={analise?.id}
+        onClose={() => setHistoricoCompletoAberto(false)}
+        onSelectOpen={abrirDoHistorico}
+      />
 
       {/* ── Resultado / Conteúdo Tático ──────────────────────────────────── */}
 

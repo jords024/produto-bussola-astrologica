@@ -17,6 +17,7 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from models.models import Analise, User
+from services.profile_service import resolve_birth_target
 from services.transit_service import (
     calcular_transitos,
     calcular_movimentos_periodo,
@@ -104,7 +105,11 @@ def serializar(a: Analise, hora_conhecida: bool = True) -> dict:
             "area": ctx.get("area"),
             "pergunta": ctx.get("pergunta"),
             "data_fim": ctx.get("data_fim"),
+            "profile_id": str(a.profile_id) if getattr(a, "profile_id", None) else ctx.get("profile_id"),
+            "profile_name": ctx.get("profile_name"),
         },
+        "profile_id": str(a.profile_id) if getattr(a, "profile_id", None) else ctx.get("profile_id"),
+        "profile_name": ctx.get("profile_name"),
         "sintese": sintese_limpa,
         "svg": a.svg_content or "",
         "status": a.status,
@@ -122,6 +127,7 @@ async def gerar_analise(
     area: str | None = None,
     pergunta: str | None = None,
     forcar: bool = False,
+    profile_id: str | None = None,
 ) -> dict:
     """Calcula (ou devolve do cache) a leitura de trânsitos de uma data ou período."""
     hoje = date.today()
@@ -145,11 +151,17 @@ async def gerar_analise(
             )
         fim_valido = data_fim
 
-    nascimento, lat, lng, hora_conhecida = dados_de_nascimento(user)
+    target_person, profile_obj = resolve_birth_target(user, db, profile_id)
+    nascimento, lat, lng, hora_conhecida = dados_de_nascimento(target_person)
+    target_profile_id = profile_obj.id if profile_obj else None
 
     existente = (
         db.query(Analise)
-        .filter(Analise.user_id == user.id, Analise.data_alvo == data_alvo)
+        .filter(
+            Analise.user_id == user.id,
+            Analise.data_alvo == data_alvo,
+            Analise.profile_id == target_profile_id,
+        )
         .order_by(Analise.created_at.desc())
         .first()
     )
@@ -177,17 +189,17 @@ async def gerar_analise(
         logger.info("Análise em cache: user='%s' data=%s fim=%s", user.name, data_alvo, fim_iso)
         return serializar(existente, hora_conhecida)
 
-    tz_str = user.tz_str or "America/Sao_Paulo"
+    tz_str = getattr(target_person, "tz_str", None) or "America/Sao_Paulo"
     try:
         calculo = await run_in_threadpool(
             calcular_transitos,
-            nome=user.name, nascimento=nascimento, lat=lat, lng=lng,
+            nome=target_person.name, nascimento=nascimento, lat=lat, lng=lng,
             tz_str=tz_str, data_alvo=data_alvo,
-            cidade=user.birth_city or "", pais=user.birth_country or "BR",
+            cidade=getattr(target_person, "birth_city", "") or "", pais=getattr(target_person, "birth_country", "BR") or "BR",
         )
     except Exception as exc:
         logger.error("Cálculo de trânsitos falhou para '%s' em %s: %s",
-                     user.name, data_alvo, exc, exc_info=True)
+                     target_person.name, data_alvo, exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Não foi possível calcular essa data. Tente novamente em alguns instantes.",
@@ -229,16 +241,18 @@ async def gerar_analise(
         "data_fim": fim_iso,
         "tipo": "periodo" if fim_valido else "dia",
         "movimentos_periodo": movimentos_periodo,
+        "profile_id": str(profile_obj.id) if profile_obj else None,
+        "profile_name": profile_obj.name if profile_obj else None,
     }
 
     perfil_usuario = {
-        "vida_agora": getattr(user, "form_vida_agora", "") or "",
-        "carrega_tempo": getattr(user, "form_carrega_tempo", "") or "",
-        "espera_descobrir": getattr(user, "form_espera_descobrir", "") or "",
+        "vida_agora": (getattr(user, "form_vida_agora", "") or "") if not profile_obj else "",
+        "carrega_tempo": (getattr(user, "form_carrega_tempo", "") or "") if not profile_obj else "",
+        "espera_descobrir": (getattr(user, "form_espera_descobrir", "") or "") if not profile_obj else "",
     }
 
     sintese, cartoes, custo_info = await generate_transit_synthesis(
-        nome=user.name,
+        nome=target_person.name,
         data_alvo=data_alvo.strftime("%d/%m/%Y"),
         posicoes=posicoes,
         textos=textos,
@@ -250,21 +264,21 @@ async def gerar_analise(
         for pl, custom_txt in cartoes.items():
             if custom_txt and len(custom_txt.strip()) > 15:
                 textos[pl] = custom_txt.strip()
-                logger.info("Cartão de %s personalizado para '%s'", pl, user.name)
+                logger.info("Cartão de %s personalizado para '%s'", pl, target_person.name)
 
     if custo_info:
         contexto["openai_cost"] = custo_info
 
     svg = await run_in_threadpool(
         gerar_svg,
-        nome=user.name, nascimento=nascimento, lat=lat, lng=lng,
+        nome=target_person.name, nascimento=nascimento, lat=lat, lng=lng,
         tz_str=tz_str, data_alvo=data_alvo,
-        cidade=user.birth_city or "", pais=user.birth_country or "BR",
+        cidade=getattr(target_person, "birth_city", "") or "", pais=getattr(target_person, "birth_country", "BR") or "BR",
     )
 
     # Cria uma nova entrada no histórico para registrar a busca do usuário,
     # preservando pesquisas anteriores do mesmo dia que tiveram outras dúvidas/contextos.
-    analise = Analise(user_id=user.id, data_alvo=data_alvo)
+    analise = Analise(user_id=user.id, profile_id=target_profile_id, data_alvo=data_alvo)
     analise.posicoes = posicoes
     analise.contexto = contexto
     analise.textos = textos

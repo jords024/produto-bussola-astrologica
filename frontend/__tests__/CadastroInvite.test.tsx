@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import CadastroPage from "@/app/(public)/cadastro/page";
+import ConfirmarCadastroPage from "@/app/(public)/cadastro/confirmar/page";
 import { api } from "@/lib/api";
 
 const mockPush = vi.fn();
@@ -142,26 +143,39 @@ describe("Cadastro via Convite Page", () => {
         whatsapp: "+5511999998888",
         password: "Sirius@2026Strong",
       });
-      // Deve ter transicionado para a etapa de verificação de código
+      // Deve ter transicionado para a etapa de confirmação via botão no e-mail
       expect(screen.getByText("Validação de E-mail")).toBeDefined();
-      expect(screen.getByTestId("input-verification-code")).toBeDefined();
+      expect(screen.getByTestId("email-link-sent-box")).toBeDefined();
+      expect(screen.queryByTestId("input-verification-code")).toBeNull();
     });
 
-    // Digita o código de 6 dígitos recebido por e-mail
-    fireEvent.change(screen.getByTestId("input-verification-code"), {
-      target: { value: "123456" },
-    });
-
-    // Submete a validação do código
-    fireEvent.click(screen.getByTestId("submit-verify-code-btn"));
-
+    // Testa reenvio do e-mail de confirmação
+    fireEvent.click(screen.getByTestId("resend-code-btn"));
     await waitFor(() => {
-      expect(api.post).toHaveBeenCalledWith("/auth/verify-register-code", {
+      expect(api.post).toHaveBeenCalledWith("/auth/resend-register-code", {
         token: "valid-token-123",
         email: "aluno@sirius.com",
-        code: "123456",
       });
-      expect(mockPush).toHaveBeenCalledWith("/dashboard");
+    });
+  });
+
+  it("valida o token do botão de confirmação em /cadastro/confirmar e ativa a conta", async () => {
+    mockSearchParamToken = "email-verify-jwt-123";
+    (api.post as any).mockResolvedValue({
+      success: true,
+      token: "jwt-token-xyz",
+      role: "client",
+      name: "Novo Aluno",
+      email: "aluno@sirius.com",
+    });
+
+    render(<ConfirmarCadastroPage />);
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith("/auth/verify-register-link", {
+        token: "email-verify-jwt-123",
+      });
+      expect(screen.getByText("E-mail Validado!")).toBeDefined();
     });
   });
 });

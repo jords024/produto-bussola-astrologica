@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { toast } from "@/components/Toast";
+import FinanceiroUserReportsModal from "./FinanceiroUserReportsModal";
+import PaginationControls from "@/components/PaginationControls";
 
 export interface FinanceiroUserItem {
   user_id: string | null;
@@ -16,6 +18,7 @@ export interface FinanceiroUserItem {
   total_tokens: number;
   cost_usd: number;
   cost_brl: number;
+  last_activity_at?: string | null;
 }
 
 export interface FinanceiroResponse {
@@ -47,13 +50,32 @@ const PERIOD_OPTIONS = [
   { id: "custom", label: "Personalizado" },
 ];
 
+const ROLE_OPTIONS = [
+  { id: "all", label: "Todos" },
+  { id: "client", label: "Alunos" },
+  { id: "admin", label: "Admins" },
+  { id: "lead", label: "Leads" },
+];
+
+const SORT_OPTIONS = [
+  { id: "highest_cost", label: "Maior gasto" },
+  { id: "lowest_cost", label: "Menor gasto" },
+  { id: "newest", label: "Mais recente" },
+  { id: "oldest", label: "Mais antiga" },
+];
+
 export default function Financeiro() {
   const [period, setPeriod] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("highest_cost");
+  const [selectedUser, setSelectedUser] = useState<FinanceiroUserItem | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<FinanceiroResponse | null>(null);
+  const pageSize = 10;
 
   const fetchFinanceiro = useCallback(async () => {
     setLoading(true);
@@ -65,6 +87,8 @@ export default function Financeiro() {
         if (endDate) params.set("end_date", endDate);
       }
       if (search.trim()) params.set("search", search.trim());
+      if (roleFilter !== "all") params.set("role", roleFilter);
+      if (sortBy !== "highest_cost") params.set("sort", sortBy);
 
       const res = await api.get<FinanceiroResponse>(`/admin/financeiro?${params.toString()}`);
       setData(res);
@@ -73,7 +97,11 @@ export default function Financeiro() {
     } finally {
       setLoading(false);
     }
-  }, [period, startDate, endDate, search]);
+  }, [period, startDate, endDate, search, roleFilter, sortBy]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [period, startDate, endDate, search, roleFilter, sortBy]);
 
   useEffect(() => {
     fetchFinanceiro();
@@ -85,6 +113,9 @@ export default function Financeiro() {
 
   const summary = data?.summary;
   const users = data?.users || [];
+  const totalPages = Math.max(1, Math.ceil(users.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedUsers = users.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const getRoleBadge = (role: string) => {
     if (role === "admin") {
@@ -188,6 +219,48 @@ export default function Financeiro() {
             </div>
           </div>
         )}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#7f77dd]/15">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium" style={{ color: "#8b87b8" }}>Perfil:</span>
+            {ROLE_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                data-testid={`role-btn-${opt.id}`}
+                onClick={() => setRoleFilter(opt.id)}
+                className="px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                style={{
+                  background: roleFilter === opt.id ? "linear-gradient(135deg, #34d399, #059669)" : "rgba(255, 255, 255, 0.04)",
+                  color: roleFilter === opt.id ? "#ffffff" : "#8b87b8",
+                  border: roleFilter === opt.id ? "1px solid rgba(52, 211, 153, 0.6)" : "1px solid rgba(255, 255, 255, 0.08)",
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label htmlFor="financeiro-sort-select" className="text-xs font-medium" style={{ color: "#8b87b8" }}>
+              Ordenar por:
+            </label>
+            <select
+              id="financeiro-sort-select"
+              data-testid="financeiro-sort-select"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="rounded-xl px-3 py-1.5 text-xs outline-none cursor-pointer"
+              style={{ background: "#14102b", border: "1px solid rgba(127, 119, 221, 0.35)", color: "#f0eeff" }}
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* Cards de Resumo */}
@@ -264,23 +337,27 @@ export default function Financeiro() {
             Nenhum consumo registrado para os filtros selecionados.
           </div>
         ) : (
-          users.map((u, idx) => (
-            <div
-              key={`${u.user_id || u.email}-${idx}`}
-              data-testid={`financeiro-user-row-${idx}`}
-              className="p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 transition-all hover:border-[#7F77DD]/40"
-              style={{
-                background: "#1a1535",
-                border: "1px solid rgba(127, 119, 221, 0.2)",
-              }}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                  style={{ background: "rgba(127, 119, 221, 0.2)", color: "#AFA9EC" }}
-                >
-                  #{idx + 1}
-                </div>
+          paginatedUsers.map((u, idx) => {
+            const globalPos = (safePage - 1) * pageSize + idx + 1;
+            return (
+              <button
+                key={`${u.user_id || u.email}-${globalPos}`}
+                type="button"
+                data-testid={`financeiro-user-row-${idx}`}
+                onClick={() => setSelectedUser(u)}
+                className="w-full text-left p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 transition-all hover:border-[#7F77DD]/60 hover:bg-[#211b44] cursor-pointer"
+                style={{
+                  background: "#1a1535",
+                  border: "1px solid rgba(127, 119, 221, 0.2)",
+                }}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                    style={{ background: "rgba(127, 119, 221, 0.2)", color: "#AFA9EC" }}
+                  >
+                    #{globalPos}
+                  </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-sm truncate" style={{ color: "#f0eeff" }}>
@@ -316,12 +393,35 @@ export default function Financeiro() {
                   <div className="text-[11px] text-emerald-200/70">
                     ~{formatBrl(u.cost_brl)}
                   </div>
+                  <div className="text-[10px] text-[#AFA9EC] mt-0.5">
+                    Ver relatórios →
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            </button>
+            );
+          })
         )}
       </div>
+
+      <PaginationControls
+        currentPage={safePage}
+        totalPages={totalPages}
+        totalItems={users.length}
+        pageSize={pageSize}
+        onPageChange={setCurrentPage}
+        itemName="usuários"
+      />
+
+      {selectedUser && (
+        <FinanceiroUserReportsModal
+          user={selectedUser}
+          period={period}
+          startDate={startDate}
+          endDate={endDate}
+          onClose={() => setSelectedUser(null)}
+        />
+      )}
     </div>
   );
 }

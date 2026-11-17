@@ -77,6 +77,12 @@ export default function ConviteCard({
             <span className="text-xs" style={{ color: "#8b87b8" }}>
               {inv.validity_type === "never" ? "♾️ Nunca expira" : `⏱️ Validade de ${inv.validity_type}`}
             </span>
+
+            {inv.role === "client" && inv.access_days && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/25">
+                ⏳ Acesso: {inv.access_days} dias
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2 max-w-md">

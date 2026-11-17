@@ -153,3 +153,233 @@ def test_financeiro_period_filter_and_invalid_period():
     res_today = client.get("/admin/financeiro?period=today", headers={"Authorization": f"Bearer {token}"})
     assert res_today.status_code == 200
     assert res_today.json()["period"] == "today"
+
+
+def test_financeiro_role_filter_recalculates_summary_and_sorting():
+    from datetime import datetime, timedelta
+    token = get_admin_token()
+    db = SessionLocal()
+    tag = uuid.uuid4().hex[:6]
+    client_email = f"role_client_{tag}@exemplo.com"
+    admin_email = f"role_admin_{tag}@exemplo.com"
+    try:
+        uid_c = str(uuid.uuid4())
+        uid_a = str(uuid.uuid4())
+        db.add(User(
+            id=uid_c,
+            name=f"Aluno Filtro {tag}",
+            email=client_email,
+            password_hash="x",
+            role="client",
+        ))
+        db.add(User(
+            id=uid_a,
+            name=f"Admin Filtro {tag}",
+            email=admin_email,
+            password_hash="x",
+            role="admin",
+        ))
+        now = datetime.utcnow()
+        db.add(Analise(
+            id=str(uuid.uuid4()),
+            user_id=uid_c,
+            data_alvo=date.today(),
+            sintese="Leitura aluno",
+            prompt_tokens=100,
+            completion_tokens=200,
+            total_tokens=300,
+            cost_usd=0.05,
+            status="ok",
+            created_at=now - timedelta(hours=2),
+        ))
+        db.add(Analise(
+            id=str(uuid.uuid4()),
+            user_id=uid_a,
+            data_alvo=date.today(),
+            sintese="Leitura admin",
+            prompt_tokens=200,
+            completion_tokens=400,
+            total_tokens=600,
+            cost_usd=0.12,
+            status="ok",
+            created_at=now - timedelta(hours=1),
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    # Filtra apenas alunos -> resumo deve considerar apenas o aluno
+    res_client = client.get(
+        f"/admin/financeiro?period=all&role=client&search={tag}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_client.status_code == 200
+    d_client = res_client.json()
+    assert d_client["role"] == "client"
+    assert len(d_client["users"]) == 1
+    assert d_client["users"][0]["email"] == client_email
+    assert d_client["summary"]["total_cost_usd"] == pytest.approx(0.05, rel=1e-4)
+    assert d_client["summary"]["readings_count"] == 1
+
+    # Ordena por lowest_cost e newest
+    res_lowest = client.get(
+        f"/admin/financeiro?period=all&search={tag}&sort=lowest_cost",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_lowest.status_code == 200
+    assert res_lowest.json()["users"][0]["email"] == client_email
+
+    res_newest = client.get(
+        f"/admin/financeiro?period=all&search={tag}&sort=newest",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_newest.status_code == 200
+    assert res_newest.json()["users"][0]["email"] == admin_email
+
+    res_oldest = client.get(
+        f"/admin/financeiro?period=all&search={tag}&sort=oldest",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_oldest.status_code == 200
+    assert res_oldest.json()["users"][0]["email"] == client_email
+
+
+def test_financeiro_user_reports_endpoint_and_sorting():
+    from datetime import datetime, timedelta
+    token = get_admin_token()
+    db = SessionLocal()
+    email = f"reports_{uuid.uuid4().hex[:6]}@exemplo.com"
+    uid = str(uuid.uuid4())
+    try:
+        db.add(User(
+            id=uid,
+            name="Usuario Relatorios",
+            email=email,
+            password_hash="x",
+            role="client",
+        ))
+        now = datetime.utcnow()
+        db.add(Analise(
+            id=str(uuid.uuid4()),
+            user_id=uid,
+            data_alvo=date.today(),
+            sintese="Síntese antiga barata",
+            contexto={"area": "Carreira", "pergunta": "Devo mudar?"},
+            textos={"Sol": "Texto do Sol"},
+            prompt_tokens=100,
+            completion_tokens=100,
+            total_tokens=200,
+            cost_usd=0.01,
+            status="ok",
+            created_at=now - timedelta(days=2),
+        ))
+        db.add(Analise(
+            id=str(uuid.uuid4()),
+            user_id=uid,
+            data_alvo=date.today(),
+            sintese="Síntese recente cara",
+            contexto={"area": "Amor", "pergunta": "Como fica?"},
+            textos={"Lua": "Texto da Lua"},
+            prompt_tokens=500,
+            completion_tokens=500,
+            total_tokens=1000,
+            cost_usd=0.09,
+            status="ok",
+            created_at=now - timedelta(minutes=10),
+        ))
+        db.add(GenerationLog(
+            id=str(uuid.uuid4()),
+            name="Usuario Relatorios",
+            email=email,
+            birth_city="São Paulo",
+            birth_date="1995-05-10",
+            birth_time="10:30",
+            model_used="gpt-4o",
+            status="success",
+            prompt_tokens=1000,
+            completion_tokens=2000,
+            total_tokens=3000,
+            cost_usd=0.04,
+            created_at=now - timedelta(hours=5),
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    # Default sort: newest
+    res = client.get(
+        f"/admin/financeiro/user-reports?user_id={uid}&period=all",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["user"]["email"] == email
+    assert len(data["readings"]) == 2
+    assert len(data["maps"]) == 1
+    assert data["readings"][0]["sintese"] == "Síntese recente cara"
+    assert data["readings"][0]["area"] == "Amor"
+    assert data["readings"][0]["textos"]["Lua"] == "Texto da Lua"
+    assert data["readings"][0]["created_at"].endswith("Z")
+    assert data["maps"][0]["birth_city"] == "São Paulo"
+
+    # Sort oldest
+    res_old = client.get(
+        f"/admin/financeiro/user-reports?user_id={uid}&sort=oldest",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_old.status_code == 200
+    assert res_old.json()["readings"][0]["sintese"] == "Síntese antiga barata"
+
+    # Sort lowest_cost
+    res_low = client.get(
+        f"/admin/financeiro/user-reports?user_id={uid}&sort=lowest_cost",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_low.status_code == 200
+    assert res_low.json()["readings"][0]["cost_usd"] == pytest.approx(0.01, rel=1e-4)
+
+    # Missing user_id and email -> 400
+    res_missing = client.get(
+        "/admin/financeiro/user-reports",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_missing.status_code == 400
+
+
+def test_financeiro_ignores_salvo_no_painel_logs():
+    token = get_admin_token()
+    db = SessionLocal()
+    email = f"salvo_painel_{uuid.uuid4().hex[:6]}@exemplo.com"
+    try:
+        db.add(GenerationLog(
+            id=str(uuid.uuid4()),
+            name="Apenas Salvo",
+            email=email,
+            birth_city="Recife",
+            birth_date="1990-01-01",
+            birth_time="12:00",
+            model_used="salvo no painel",
+            status="success",
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            cost_usd=0.0,
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    res_sum = client.get(
+        f"/admin/financeiro?period=all&search={email}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_sum.status_code == 200
+    assert res_sum.json()["users"] == []
+    assert res_sum.json()["summary"]["total_cost_usd"] == 0.0
+
+    res_rep = client.get(
+        f"/admin/financeiro/user-reports?email={email}&period=all",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_rep.status_code == 200
+    assert res_rep.json()["maps"] == []
