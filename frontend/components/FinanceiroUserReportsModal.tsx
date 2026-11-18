@@ -131,7 +131,7 @@ export default function FinanceiroUserReportsModal({
         if (endDate) params.set("end_date", endDate);
       }
 
-      const res = await api.get(`/admin/financeiro/user-reports?${params.toString()}`);
+      const res = await api.get<UserReportsResponse>(`/admin/financeiro/user-reports?${params.toString()}`);
       setData(res);
       if (res.readings.length === 0 && res.maps.length > 0) {
         setActiveTab("maps");

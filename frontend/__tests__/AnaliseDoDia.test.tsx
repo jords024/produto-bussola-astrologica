@@ -328,4 +328,25 @@ describe("AnaliseDoDia — os aspectos ao mapa da pessoa", () => {
     expect(api.get).toHaveBeenCalledWith("/members/analises/h-8");
     expect(api.post).not.toHaveBeenCalled();
   });
+
+  it("avança a etapa de carregamento após 3.5s sem lançar ReferenceError", async () => {
+    vi.useFakeTimers();
+    let resolvePost: (v: unknown) => void;
+    vi.mocked(api.post).mockImplementation(
+      () => new Promise((resolve) => { resolvePost = resolve; })
+    );
+
+    try {
+      render(<AnaliseDoDia />);
+      fireEvent.click(screen.getByRole("button", { name: /ver leitura do dia/i }));
+
+      await vi.advanceTimersByTimeAsync(3600);
+      expect(screen.getByTestId("analise-loading-modal")).toBeDefined();
+      expect(screen.getByRole("status").textContent).toContain("Calculando o movimento dos astros");
+
+      resolvePost!(ANALISE);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

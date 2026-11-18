@@ -161,4 +161,28 @@ describe("PainelAluno", () => {
     expect(screen.queryByText(/"Pergunta teste número 1"/)).toBeNull();
     expect(screen.getByTestId("page-indicator").textContent).toContain("2 / 3");
   });
+
+  it("exibe o botão Ler um dia à direita de Editar Meus Dados", async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.startsWith("/members/chart")) return Promise.resolve(MAPA_MOCK);
+      if (url === "/members/analises") return Promise.resolve(DIARIO_MOCK);
+      return Promise.resolve({ profiles: [] });
+    });
+
+    const onIrPara = vi.fn();
+    render(
+      <PainelAluno
+        area="bussola"
+        usuario={{ name: "Aryaraj Fernandes", email: "aryarajunity@gmail.com" }}
+        onIrPara={onIrPara}
+      />
+    );
+
+    const editarBtn = await screen.findByText("⚙️ Editar Meus Dados");
+    const lerBtn = screen.getByText("Ler um dia →");
+    expect(editarBtn.parentElement).toBe(lerBtn.parentElement);
+
+    fireEvent.click(lerBtn);
+    expect(onIrPara).toHaveBeenCalledWith("leitura");
+  });
 });

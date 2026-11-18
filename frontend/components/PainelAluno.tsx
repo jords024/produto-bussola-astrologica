@@ -209,12 +209,23 @@ export default function PainelAluno({
             </p>
           </div>
           {mapa?.svg && (
-            <button
-              onClick={() => onIrPara("dados")}
-              className="text-xs px-3.5 py-2 rounded-xl border transition-all text-amber-400 hover:text-amber-300 border-amber-400/30 hover:border-amber-400/60 bg-amber-400/5 hover:bg-amber-400/10 shrink-0 self-start sm:self-auto cursor-pointer"
-            >
-              ⚙️ Editar Meus Dados
-            </button>
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => onIrPara("dados")}
+                className="text-xs px-3.5 py-2 rounded-xl border transition-all text-amber-400 hover:text-amber-300 border-amber-400/30 hover:border-amber-400/60 bg-amber-400/5 hover:bg-amber-400/10 cursor-pointer"
+              >
+                ⚙️ Editar Meus Dados
+              </button>
+              <button
+                type="button"
+                onClick={() => onIrPara("leitura")}
+                className="text-xs px-4 py-2 rounded-xl font-bold transition-all hover:opacity-90 cursor-pointer"
+                style={{ background: `linear-gradient(135deg, ${C.gold}, #c67c13)`, color: "#120b24" }}
+              >
+                Ler um dia →
+              </button>
+            </div>
           )}
         </div>
 
@@ -281,14 +292,6 @@ export default function PainelAluno({
               title={nomeExibido ? `Mapa de ${nomeExibido}` : "Seu mapa"}
               svgContent={mapa.svg}
             />
-
-            <button
-              onClick={() => onIrPara("leitura")}
-              className="mt-8 px-6 py-3.5 rounded-xl text-sm font-bold transition-all hover:opacity-90"
-              style={{ background: `linear-gradient(135deg, ${C.gold}, #c67c13)`, color: "#120b24" }}
-            >
-              Ler um dia →
-            </button>
           </>
         ) : (
           <div className="space-y-6">

@@ -206,6 +206,8 @@ export interface ItemHistorico {
   id: string;
   data: string;
   data_fim?: string | null;
+  area?: string | null;
+  pergunta?: string | null;
   status: string;
   tem_sintese: boolean;
   sintese_preview?: string;

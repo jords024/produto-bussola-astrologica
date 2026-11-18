@@ -10,7 +10,7 @@ import HistoricoCompletoModal from "@/components/analise/HistoricoCompletoModal"
 import HistoricoChipsBar from "@/components/analise/HistoricoChipsBar";
 import AnaliseLoadingCard from "@/components/analise/AnaliseLoadingCard";
 import {
-  T, sanitizarEntradaTexto, hoje, somaDias, porExtenso, curta, type Analise, type ItemHistorico,
+  T, ETAPAS_LOADING, sanitizarEntradaTexto, hoje, somaDias, porExtenso, curta, type Analise, type ItemHistorico,
 } from "@/components/analise/analiseConstants";
 
 export default function AnaliseDoDia({
