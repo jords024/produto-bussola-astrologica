@@ -42,6 +42,10 @@ Para gerar um convite que **NÃO EXPIRA**, envie os seguintes dados:
 | :--- | :--- | :--- | :--- |
 | `role` | `string` | `"client"` ou `"admin"` | Define se o convite é para cadastro de **Aluno** (`"client"`) ou Administrador (`"admin"`). |
 | `validity_type` | `string` | `"never"`, `"24h"`, `"48h"`, `"72h"` | Use `"never"` para garantir que o link **não expire**. |
+| `access_days` | `integer \| null` | `null` ou `>= 1` | *(Opcional)* Dias de acesso à IA após o cadastro (`null` = vitalício). |
+| `daily_request_limit` | `integer \| null` | `null` ou `>= 1` | *(Opcional)* Limite diário de novas Leituras do Dia com IA (`null` = ilimitado). Reset à meia-noite (Brasília). |
+| `max_total_requests` | `integer \| null` | `null` ou `>= 1` | *(Opcional)* Limite máximo total (ou franquia inicial livre no modo `quota_then_daily`) de novas Leituras do Dia com IA (`null` = ilimitado). |
+| `request_limit_mode` | `string` | `"strict"` ou `"quota_then_daily"` | *(Opcional, padrão `"strict"`)* `"strict"` bloqueia ao atingir o total; `"quota_then_daily"` libera uso livre até atingir `max_total_requests` (ex.: `100`) e depois aplica `daily_request_limit` por dia (ex.: `3`). |
 
 ---
 
@@ -141,3 +145,49 @@ print("Link completo do convite:", data.get("invite_url"))
    ```
 6. No passo seguinte (ex: WhatsApp/Evolution API/Z-API), use a variável:
    `{{ $json.invite_url }}`
+
+
+---
+
+## ⚡ 5. Atualizar Limites de Requisições de IA de um Aluno Já Cadastrado
+
+Você também pode configurar ou alterar o limite diário e o limite máximo total de um aluno já existente (ex.: após upgrade de plano ou recarga) usando a mesma `X-API-Key`.
+
+* **Método:** `PATCH` (ou `PUT`)
+* **URL:** `https://api.bussolaastrologica.com.br/admin/users/limits`
+* **Headers:**
+  ```http
+  Content-Type: application/json
+  X-API-Key: bussola_ext_sec_8f93a1c4e72b0d59
+  ```
+* **Body (JSON) — Exemplo Franquia inicial (100 livres) e depois 3/dia:**
+  ```json
+  {
+    "email": "aluno@exemplo.com",
+    "request_limit_mode": "quota_then_daily",
+    "max_total_requests": 100,
+    "daily_request_limit": 3
+  }
+  ```
+* **Body (JSON) — Exemplo definindo 8/dia e 100 no total (bloqueia ao chegar em 100):**
+  ```json
+  {
+    "email": "aluno@exemplo.com",
+    "daily_request_limit": 8,
+    "max_total_requests": 100
+  }
+  ```
+* **Body (JSON) — Exemplo liberando ilimitado:**
+  ```json
+  {
+    "email": "aluno@exemplo.com",
+    "daily_request_limit": null,
+    "max_total_requests": null
+  }
+  ```
+  *(Dica: você pode enviar apenas um dos campos para atualizar somente ele sem alterar o outro, ou passar `user_id` no lugar de `email`.)*
+
+### Consultar limites e uso atual do aluno
+* **Método:** `GET`
+* **URL:** `https://api.bussolaastrologica.com.br/admin/users/limits?email=aluno@exemplo.com`
+* **Header:** `X-API-Key: bussola_ext_sec_8f93a1c4e72b0d59`

@@ -72,7 +72,7 @@ describe("GestaoUsuarios Component", () => {
     // Validar Métricas
     expect(screen.getByText("Total de Usuários")).toBeDefined();
     expect(screen.getByText("Administradores")).toBeDefined();
-    expect(screen.getByText("Clientes Registrados")).toBeDefined();
+    expect(screen.getByText("Alunos Registrados")).toBeDefined();
 
     // Validar Usuários renderizados
     expect(screen.getByText("Admin Master")).toBeDefined();
@@ -388,6 +388,37 @@ describe("GestaoUsuarios Component", () => {
     const rows = screen.getAllByTestId(/^user-row-/);
     expect(rows.length).toBe(2);
     expect(rows[0].getAttribute("data-testid")).toBe("user-row-super-admin-1");
+  });
+
+  it("conta apenas alunos reais em Alunos Registrados, separando Administradores e Alunos Internos", async () => {
+    (api.get as any).mockResolvedValue({
+      total: 4,
+      items: [
+        ...mockUsersResponse.items,
+        {
+          id: "4",
+          name: "Equipe Interna",
+          email: "interno@exemplo.com",
+          whatsapp: null,
+          role: "internal_client",
+          is_active: true,
+          is_super_admin: false,
+          created_at: "2026-03-26T18:00:00Z",
+          sun_sign: null,
+          birth_city: null,
+        },
+      ],
+    });
+
+    render(<GestaoUsuarios />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("metric-total-users").textContent).toBe("4");
+    });
+
+    expect(screen.getByTestId("metric-admin-users").textContent).toBe("1");
+    expect(screen.getByTestId("metric-real-clients").textContent).toBe("2");
+    expect(screen.getByTestId("metric-internal-clients").textContent).toBe("1");
   });
 });
 

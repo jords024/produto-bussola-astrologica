@@ -160,4 +160,93 @@ describe("EditarUsuarioModal Component", () => {
       );
     });
   });
+
+  it("permite configurar limite diário e limite máximo total ao editar usuário", async () => {
+    (api.put as any).mockResolvedValueOnce({ success: true });
+
+    render(
+      <EditarUsuarioModal
+        isOpen={true}
+        user={mockRegularUser}
+        onClose={vi.fn()}
+        onUserUpdated={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId("edit-tab-limites"));
+    fireEvent.click(screen.getByTestId("daily-limit-custom-btn"));
+    fireEvent.change(screen.getByTestId("daily-limit-input"), { target: { value: "6" } });
+    fireEvent.click(screen.getByTestId("total-limit-custom-btn"));
+    fireEvent.change(screen.getByTestId("total-limit-input"), { target: { value: "80" } });
+    fireEvent.click(screen.getByTestId("save-edit-user-btn"));
+
+    await waitFor(() => {
+      expect(api.put).toHaveBeenCalledWith(
+        `/admin/users/${mockRegularUser.id}`,
+        expect.objectContaining({
+          unlimited_daily_requests: false,
+          daily_request_limit: 6,
+          unlimited_total_requests: false,
+          max_total_requests: 80,
+        })
+      );
+    });
+  });
+
+  it("permite ativar modo Franquia -> depois diário (quota_then_daily) ao editar usuário", async () => {
+    (api.put as any).mockResolvedValueOnce({ success: true });
+
+    render(
+      <EditarUsuarioModal
+        isOpen={true}
+        user={mockRegularUser}
+        onClose={vi.fn()}
+        onUserUpdated={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId("edit-tab-limites"));
+    fireEvent.click(screen.getByTestId("limit-mode-quota-then-daily-btn"));
+    fireEvent.change(screen.getByTestId("total-limit-input"), { target: { value: "100" } });
+    fireEvent.change(screen.getByTestId("daily-limit-input"), { target: { value: "3" } });
+    fireEvent.click(screen.getByTestId("save-edit-user-btn"));
+
+    await waitFor(() => {
+      expect(api.put).toHaveBeenCalledWith(
+        `/admin/users/${mockRegularUser.id}`,
+        expect.objectContaining({
+          request_limit_mode: "quota_then_daily",
+          max_total_requests: 100,
+          daily_request_limit: 3,
+        })
+      );
+    });
+  });
+
+  it("organiza o popup em 3 abas para aluno e oculta abas de aluno ao mudar para Administrador", () => {
+    render(
+      <EditarUsuarioModal
+        isOpen={true}
+        user={mockRegularUser}
+        onClose={vi.fn()}
+        onUserUpdated={vi.fn()}
+      />
+    );
+
+    expect(screen.getByTestId("edit-tab-panel-dados")).toBeDefined();
+    expect(screen.queryByTestId("edit-tab-panel-acesso")).toBeNull();
+    expect(screen.queryByTestId("edit-tab-panel-limites")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("edit-tab-acesso"));
+    expect(screen.getByTestId("edit-tab-panel-acesso")).toBeDefined();
+    expect(screen.queryByTestId("edit-tab-panel-dados")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("edit-tab-limites"));
+    expect(screen.getByTestId("edit-tab-panel-limites")).toBeDefined();
+
+    fireEvent.click(screen.getByTestId("edit-tab-dados"));
+    fireEvent.click(screen.getByTestId("edit-role-admin-btn"));
+    expect(screen.queryByTestId("edit-tab-acesso")).toBeNull();
+    expect(screen.queryByTestId("edit-tab-limites")).toBeNull();
+  });
 });

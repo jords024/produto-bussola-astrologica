@@ -8,7 +8,7 @@ load_dotenv(override=False)
 
 from database import engine
 from models.models import Base
-from routes import auth, funnel, members, admin, geocoding, admin_chart, backups, docker_logs, invites, financeiro, profiles, tutorials
+from routes import auth, funnel, members, admin, geocoding, admin_chart, backups, docker_logs, invites, financeiro, profiles, tutorials, request_limits
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 
@@ -141,6 +141,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(funnel.router)
 app.include_router(members.router)
+app.include_router(request_limits.router)
 app.include_router(admin.router)
 app.include_router(geocoding.router)
 app.include_router(admin_chart.router)

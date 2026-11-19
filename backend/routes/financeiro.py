@@ -2,8 +2,8 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import cast, Date, func
-from sqlalchemy.orm import Session
+from sqlalchemy import cast, Date, String, func, or_
+from sqlalchemy.orm import Session, load_only
 
 from database import get_db
 from models.models import User, GenerationLog, Analise
@@ -140,14 +140,18 @@ def _aggregate_costs(
     db: Session,
     d_start: Optional[date],
     d_end: Optional[date],
+    users_cache: Optional[Tuple[dict, dict]] = None,
 ):
     """Agrega consumo de Mapas (GenerationLog) e Leituras do Dia (Analise) por usuário."""
-    users_by_email = {}
-    users_by_id = {}
-    for u in db.query(User).all():
-        users_by_id[str(u.id)] = u
-        if u.email:
-            users_by_email[u.email.strip().lower()] = u
+    if users_cache is not None:
+        users_by_id, users_by_email = users_cache
+    else:
+        users_by_email = {}
+        users_by_id = {}
+        for u in db.query(User).options(load_only(User.id, User.name, User.email, User.role)).all():
+            users_by_id[str(u.id)] = u
+            if u.email:
+                users_by_email[u.email.strip().lower()] = u
 
     per_user = {}
 
@@ -168,8 +172,21 @@ def _aggregate_costs(
             }
         return per_user[key]
 
-    # 1. Mapas (GenerationLog)
-    q_logs = db.query(GenerationLog)
+    # 1. Mapas (GenerationLog) — carrega apenas colunas necessárias para agregação
+    q_logs = db.query(GenerationLog).options(
+        load_only(
+            GenerationLog.id,
+            GenerationLog.name,
+            GenerationLog.email,
+            GenerationLog.model_used,
+            GenerationLog.status,
+            GenerationLog.prompt_tokens,
+            GenerationLog.completion_tokens,
+            GenerationLog.total_tokens,
+            GenerationLog.cost_usd,
+            GenerationLog.created_at,
+        )
+    )
     if d_start:
         q_logs = q_logs.filter(cast(GenerationLog.created_at, Date) >= d_start)
     if d_end:
@@ -194,15 +211,58 @@ def _aggregate_costs(
             bucket["last_activity_at"] = log_ts
         total_maps += 1
 
-    # 2. Leituras do Dia (Analise)
-    q_analises = db.query(Analise)
+    # 2. Leituras do Dia (Analise) — agregação direta no SQL (GROUP BY) sem trafegar SVG/JSONB
+    q_agg = db.query(
+        Analise.user_id,
+        func.count(Analise.id).label("cnt"),
+        func.coalesce(func.sum(Analise.prompt_tokens), 0).label("p_tok"),
+        func.coalesce(func.sum(Analise.completion_tokens), 0).label("c_tok"),
+        func.coalesce(func.sum(Analise.total_tokens), 0).label("t_tok"),
+        func.coalesce(func.sum(Analise.cost_usd), 0.0).label("cost"),
+        func.max(Analise.created_at).label("last_at"),
+    ).filter(
+        or_(Analise.cost_usd > 0, Analise.total_tokens > 0)
+    )
     if d_start:
-        q_analises = q_analises.filter(cast(Analise.created_at, Date) >= d_start)
+        q_agg = q_agg.filter(cast(Analise.created_at, Date) >= d_start)
     if d_end:
-        q_analises = q_analises.filter(cast(Analise.created_at, Date) <= d_end)
+        q_agg = q_agg.filter(cast(Analise.created_at, Date) <= d_end)
 
     total_readings = 0
-    for a in q_analises.all():
+    for row in q_agg.group_by(Analise.user_id).all():
+        uid = str(row.user_id)
+        u_obj = users_by_id.get(uid)
+        key = f"user:{uid}"
+        bucket = _get_bucket(key, u_obj, "Usuário Removido", "—")
+        p_tok = int(row.p_tok or 0)
+        c_tok = int(row.c_tok or 0)
+        t_tok = int(row.t_tok or (p_tok + c_tok))
+        cost = float(row.cost or 0.0)
+        cnt = int(row.cnt or 0)
+        bucket["readings_count"] += cnt
+        bucket["prompt_tokens"] += p_tok
+        bucket["completion_tokens"] += c_tok
+        bucket["total_tokens"] += t_tok
+        bucket["cost_usd"] += cost
+        a_ts = _to_utc_iso(row.last_at)
+        if a_ts and (not bucket["last_activity_at"] or a_ts > bucket["last_activity_at"]):
+            bucket["last_activity_at"] = a_ts
+        total_readings += cnt
+
+    # Fallback apenas para análises legadas antigas (sem colunas de custo, mas com contexto['openai_cost'])
+    q_legacy = db.query(Analise).options(
+        load_only(Analise.id, Analise.user_id, Analise.contexto, Analise.created_at, Analise.cost_usd, Analise.total_tokens)
+    ).filter(
+        or_(Analise.cost_usd.is_(None), Analise.cost_usd == 0),
+        or_(Analise.total_tokens.is_(None), Analise.total_tokens == 0),
+        Analise.contexto.isnot(None),
+    )
+    if d_start:
+        q_legacy = q_legacy.filter(cast(Analise.created_at, Date) >= d_start)
+    if d_end:
+        q_legacy = q_legacy.filter(cast(Analise.created_at, Date) <= d_end)
+
+    for a in q_legacy.all():
         p_tok, c_tok, t_tok, cost = _extract_analise_cost(a)
         if cost == 0.0 and t_tok == 0:
             continue
@@ -259,21 +319,31 @@ def get_financeiro_summary(
     d_start, d_end = _resolve_date_range(period, start_date, end_date)
 
     try:
-        items, total_maps, total_readings = _aggregate_costs(db, d_start, d_end)
+        users_by_email = {}
+        users_by_id = {}
+        for u in db.query(User).options(load_only(User.id, User.name, User.email, User.role)).all():
+            users_by_id[str(u.id)] = u
+            if u.email:
+                users_by_email[u.email.strip().lower()] = u
+        users_cache = (users_by_id, users_by_email)
+
+        items, total_maps, total_readings = _aggregate_costs(db, d_start, d_end, users_cache=users_cache)
+
+        # Gasto do mês atual (reaproveita resultado quando o período já é o mês atual)
+        today = (datetime.utcnow() - timedelta(hours=3)).date()
+        month_start = today.replace(day=1)
+        if d_start == month_start and d_end == today:
+            month_items = list(items)
+        else:
+            month_items, _, _ = _aggregate_costs(db, month_start, today, users_cache=users_cache)
 
         # Alunos Internos (internal_client) ficam isolados dos relatórios reais por padrão,
         # aparecendo somente quando o filtro role=internal_client é selecionado.
         if role_filter == "internal_client":
             items = [i for i in items if _matches_role(i.get("role"), "internal_client")]
-        else:
-            items = [i for i in items if not _matches_role(i.get("role"), "internal_client")]
-
-        # Gasto do mês atual (recalculado conforme papel selecionado)
-        today = (datetime.utcnow() - timedelta(hours=3)).date()
-        month_items, _, _ = _aggregate_costs(db, today.replace(day=1), today)
-        if role_filter == "internal_client":
             month_items = [i for i in month_items if _matches_role(i.get("role"), "internal_client")]
         else:
+            items = [i for i in items if not _matches_role(i.get("role"), "internal_client")]
             month_items = [i for i in month_items if not _matches_role(i.get("role"), "internal_client")]
             if role_filter != "all":
                 month_items = [i for i in month_items if _matches_role(i.get("role"), role_filter)]
@@ -379,23 +449,36 @@ def get_financeiro_user_reports(
 
     try:
         target_user: Optional[User] = None
+        user_cols = load_only(User.id, User.name, User.email, User.role)
         if clean_user_id:
-            target_user = db.query(User).filter(User.id == clean_user_id).first()
+            target_user = db.query(User).options(user_cols).filter(User.id == clean_user_id).first()
             if not target_user:
-                # Fallback caso id venha como string e UUID exija busca linear em SQLite/tipos mistos
-                for candidate in db.query(User).all():
-                    if str(candidate.id) == clean_user_id:
-                        target_user = candidate
-                        break
+                target_user = db.query(User).options(user_cols).filter(cast(User.id, String) == clean_user_id).first()
         elif clean_email:
-            target_user = db.query(User).filter(func.lower(User.email) == clean_email).first()
+            target_user = db.query(User).options(user_cols).filter(func.lower(User.email) == clean_email).first()
 
         lookup_email = (target_user.email.strip().lower() if target_user and target_user.email else clean_email)
 
         readings = []
         if target_user or clean_user_id:
             uid_val = target_user.id if target_user else clean_user_id
-            q_analises = db.query(Analise).filter(Analise.user_id == uid_val)
+            # Carrega apenas as colunas exibidas no modal, ignorando svg_content (~285 KB/leitura) e posicoes
+            q_analises = db.query(Analise).options(
+                load_only(
+                    Analise.id,
+                    Analise.user_id,
+                    Analise.data_alvo,
+                    Analise.contexto,
+                    Analise.sintese,
+                    Analise.textos,
+                    Analise.status,
+                    Analise.prompt_tokens,
+                    Analise.completion_tokens,
+                    Analise.total_tokens,
+                    Analise.cost_usd,
+                    Analise.created_at,
+                )
+            ).filter(Analise.user_id == uid_val)
             if d_start:
                 q_analises = q_analises.filter(cast(Analise.created_at, Date) >= d_start)
             if d_end:
@@ -414,7 +497,7 @@ def get_financeiro_user_reports(
                     "pergunta": ctx.get("pergunta"),
                     "sintese": a.sintese or "",
                     "textos": a.textos if isinstance(a.textos, dict) else {},
-                    "posicoes": a.posicoes if isinstance(a.posicoes, dict) else {},
+                    "posicoes": {},
                     "status": a.status or "concluido",
                     "prompt_tokens": p_tok,
                     "completion_tokens": c_tok,
@@ -426,7 +509,23 @@ def get_financeiro_user_reports(
 
         maps = []
         if lookup_email:
-            q_logs = db.query(GenerationLog).filter(func.lower(GenerationLog.email) == lookup_email)
+            q_logs = db.query(GenerationLog).options(
+                load_only(
+                    GenerationLog.id,
+                    GenerationLog.name,
+                    GenerationLog.email,
+                    GenerationLog.birth_city,
+                    GenerationLog.birth_date,
+                    GenerationLog.birth_time,
+                    GenerationLog.model_used,
+                    GenerationLog.status,
+                    GenerationLog.prompt_tokens,
+                    GenerationLog.completion_tokens,
+                    GenerationLog.total_tokens,
+                    GenerationLog.cost_usd,
+                    GenerationLog.created_at,
+                )
+            ).filter(func.lower(GenerationLog.email) == lookup_email)
             if d_start:
                 q_logs = q_logs.filter(cast(GenerationLog.created_at, Date) >= d_start)
             if d_end:

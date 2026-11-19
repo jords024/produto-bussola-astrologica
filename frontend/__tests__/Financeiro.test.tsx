@@ -266,4 +266,29 @@ describe("Financeiro Component", () => {
     fireEvent.click(screen.getByTestId("financeiro-select-all"));
     expect(screen.queryByTestId("financeiro-selection-popup")).toBeNull();
   });
+
+  it("exibe popup centralizado de carregamento enquanto ordena os gastos e fecha ao concluir", async () => {
+    render(<Financeiro />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("financeiro-sort-select")).toBeDefined();
+      expect(screen.queryByTestId("financeiro-loading-popup")).toBeNull();
+    });
+
+    let resolveNext!: (val: any) => void;
+    (api.get as any).mockImplementationOnce(
+      () => new Promise((resolve) => { resolveNext = resolve; })
+    );
+
+    fireEvent.change(screen.getByTestId("financeiro-sort-select"), {
+      target: { value: "lowest_cost" },
+    });
+
+    expect(screen.getByTestId("financeiro-loading-popup")).toBeDefined();
+
+    resolveNext(mockResponse);
+    await waitFor(() => {
+      expect(screen.queryByTestId("financeiro-loading-popup")).toBeNull();
+    });
+  });
 });

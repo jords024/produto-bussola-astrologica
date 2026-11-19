@@ -550,7 +550,7 @@ async def criar_analise(
     return await gerar_analise(
         user=current_user, db=db, data_alvo=body.data, data_fim=body.data_fim,
         area=body.area, pergunta=body.pergunta, forcar=body.forcar,
-        profile_id=body.profile_id,
+        profile_id=body.profile_id, check_limits=True,
     )
 
 

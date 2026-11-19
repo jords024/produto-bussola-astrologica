@@ -25,6 +25,7 @@ from services.access_service import is_user_access_expired, format_access_expire
 from services.profile_service import (
     apply_multiple_profiles_config, delete_user_with_relations, serialize_panel_user
 )
+from services.request_limit_service import apply_request_limits_config
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
@@ -223,6 +224,11 @@ class CreatePanelUserRequest(BaseModel):
     allow_multiple_profiles: Optional[bool] = False
     max_extra_profiles: Optional[int] = None
     unlimited_extra_profiles: Optional[bool] = False
+    daily_request_limit: Optional[int] = None
+    max_total_requests: Optional[int] = None
+    unlimited_daily_requests: Optional[bool] = False
+    unlimited_total_requests: Optional[bool] = False
+    request_limit_mode: Optional[str] = None
 
 
 class UpdatePanelUserRequest(BaseModel):
@@ -237,6 +243,11 @@ class UpdatePanelUserRequest(BaseModel):
     allow_multiple_profiles: Optional[bool] = None
     max_extra_profiles: Optional[int] = None
     unlimited_extra_profiles: Optional[bool] = False
+    daily_request_limit: Optional[int] = None
+    max_total_requests: Optional[int] = None
+    unlimited_daily_requests: Optional[bool] = False
+    unlimited_total_requests: Optional[bool] = False
+    request_limit_mode: Optional[str] = None
 
 
 class BatchDeleteUsersRequest(BaseModel):
@@ -311,6 +322,11 @@ def create_panel_user(
     apply_multiple_profiles_config(
         new_user, clean_role, body.allow_multiple_profiles, body.max_extra_profiles, bool(body.unlimited_extra_profiles)
     )
+    apply_request_limits_config(
+        new_user, clean_role, body.daily_request_limit, body.max_total_requests,
+        bool(body.unlimited_daily_requests), bool(body.unlimited_total_requests),
+        set(body.model_fields_set), body.request_limit_mode,
+    )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -372,6 +388,11 @@ def update_panel_user(
 
     apply_multiple_profiles_config(
         user, effective_role, body.allow_multiple_profiles, body.max_extra_profiles, bool(body.unlimited_extra_profiles)
+    )
+    apply_request_limits_config(
+        user, effective_role, body.daily_request_limit, body.max_total_requests,
+        bool(body.unlimited_daily_requests), bool(body.unlimited_total_requests),
+        set(body.model_fields_set), body.request_limit_mode,
     )
 
     db.commit()

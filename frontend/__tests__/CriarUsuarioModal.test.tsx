@@ -137,6 +137,7 @@ describe("CriarUsuarioModal Component", () => {
     fireEvent.change(screen.getByTestId("create-user-name-input"), { target: { value: "Aluno 30d" } });
     fireEvent.change(screen.getByTestId("create-user-email-input"), { target: { value: "aluno30@exemplo.com" } });
     fireEvent.change(screen.getByTestId("create-user-password-input"), { target: { value: "SenhaForte@123" } });
+    fireEvent.click(screen.getByTestId("create-tab-acesso"));
     fireEvent.click(screen.getByTestId("access-preset-30"));
     fireEvent.click(screen.getByTestId("submit-create-user-btn"));
 
@@ -172,5 +173,45 @@ describe("CriarUsuarioModal Component", () => {
         role: "internal_client",
       });
     });
+  });
+
+  it("envia daily_request_limit e max_total_requests quando limites personalizados são definidos", async () => {
+    (api.post as any).mockResolvedValue({ success: true });
+
+    render(<CriarUsuarioModal isOpen={true} onClose={onClose} onUserCreated={onUserCreated} />);
+
+    fireEvent.change(screen.getByTestId("create-user-name-input"), { target: { value: "Aluno Limitado" } });
+    fireEvent.change(screen.getByTestId("create-user-email-input"), { target: { value: "limitado@exemplo.com" } });
+    fireEvent.change(screen.getByTestId("create-user-password-input"), { target: { value: "SenhaForte@123" } });
+    fireEvent.click(screen.getByTestId("create-tab-limites"));
+    fireEvent.click(screen.getByTestId("daily-limit-custom-btn"));
+    fireEvent.change(screen.getByTestId("daily-limit-input"), { target: { value: "8" } });
+    fireEvent.click(screen.getByTestId("total-limit-custom-btn"));
+    fireEvent.change(screen.getByTestId("total-limit-input"), { target: { value: "50" } });
+    fireEvent.click(screen.getByTestId("submit-create-user-btn"));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith("/admin/users", {
+        name: "Aluno Limitado",
+        email: "limitado@exemplo.com",
+        whatsapp: null,
+        password: "SenhaForte@123",
+        role: "client",
+        daily_request_limit: 8,
+        max_total_requests: 50,
+      });
+    });
+  });
+
+  it("organiza o popup de criar usuário em 3 abas e oculta abas de aluno ao escolher Admin", () => {
+    render(<CriarUsuarioModal isOpen={true} onClose={onClose} onUserCreated={onUserCreated} />);
+
+    expect(screen.getByTestId("create-tab-panel-dados")).toBeDefined();
+    expect(screen.getByTestId("create-tab-acesso")).toBeDefined();
+    expect(screen.getByTestId("create-tab-limites")).toBeDefined();
+
+    fireEvent.click(screen.getByTestId("create-user-role-admin"));
+    expect(screen.queryByTestId("create-tab-acesso")).toBeNull();
+    expect(screen.queryByTestId("create-tab-limites")).toBeNull();
   });
 });

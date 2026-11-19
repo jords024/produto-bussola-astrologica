@@ -460,3 +460,70 @@ def test_financeiro_isola_aluno_interno_dos_gastos_reais():
     assert data_int["users"][0]["email"] == internal_email
     assert data_int["summary"]["total_cost_usd"] == pytest.approx(0.50, rel=1e-4)
     assert data_int["summary"]["readings_count"] == 1
+
+
+def test_financeiro_queries_nao_carregam_svg_content():
+    """Garante que /admin/financeiro e /admin/financeiro/user-reports nunca puxam analises.svg_content do banco."""
+    from sqlalchemy import event
+    from database import engine
+
+    token = get_admin_token()
+    db = SessionLocal()
+    tag = uuid.uuid4().hex[:8]
+    uid = str(uuid.uuid4())
+    email = f"fin_perf_{tag}@teste.com"
+
+    try:
+        db.add(User(
+            id=uid,
+            name=f"Aluno Perf {tag}",
+            email=email,
+            password_hash="x",
+            role="client",
+        ))
+        db.add(Analise(
+            id=str(uuid.uuid4()),
+            user_id=uid,
+            data_alvo=date.today(),
+            sintese="Síntese leve",
+            svg_content="<svg>" + ("x" * 10000) + "</svg>",
+            posicoes=[{"planeta": "Sun"}],
+            prompt_tokens=100,
+            completion_tokens=200,
+            total_tokens=300,
+            cost_usd=0.04,
+            status="ok",
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    executed_sqls = []
+
+    def _capture_sql(conn, cursor, statement, parameters, context, executemany):
+        executed_sqls.append(statement.lower())
+
+    event.listen(engine, "before_cursor_execute", _capture_sql)
+    try:
+        res_sum = client.get(
+            f"/admin/financeiro?period=all&search={tag}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert res_sum.status_code == 200
+        assert len(res_sum.json()["users"]) == 1
+
+        res_rep = client.get(
+            f"/admin/financeiro/user-reports?user_id={uid}&period=all",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert res_rep.status_code == 200
+        assert len(res_rep.json()["readings"]) == 1
+        assert res_rep.json()["readings"][0]["sintese"] == "Síntese leve"
+    finally:
+        event.remove(engine, "before_cursor_execute", _capture_sql)
+
+    analises_selects = [s for s in executed_sqls if "from analises" in s]
+    assert len(analises_selects) >= 2
+    for sql in analises_selects:
+        assert "svg_content" not in sql
+        assert "posicoes" not in sql

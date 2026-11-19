@@ -13,6 +13,7 @@ from database import get_db
 from models.models import User, UserInvite, RegistrationVerification
 from routes.auth import require_admin, get_admin_or_api_key, hash_password, create_token, JWT_SECRET, JWT_ALGORITHM
 from services.brevo_service import send_brevo_verification_code, send_brevo_verification_link
+from services.request_limit_service import validate_optional_limit, normalize_limit_mode
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,9 @@ class CreateInviteRequest(BaseModel):
     role: str = Field(..., description="'client' para Aluno ou 'admin' para Administrador")
     validity_type: str = Field("never", description="'never', '24h', '48h', '72h'")
     access_days: Optional[int] = Field(None, description="Dias de acesso à plataforma após o cadastro (None = vitalício)")
+    daily_request_limit: Optional[int] = Field(None, description="Limite diário de leituras IA (None = ilimitado)")
+    max_total_requests: Optional[int] = Field(None, description="Limite máximo total de leituras IA (None = ilimitado)")
+    request_limit_mode: Optional[str] = Field("strict", description="'strict' ou 'quota_then_daily'")
 
 
 class RegisterWithInviteRequest(BaseModel):
@@ -58,6 +62,9 @@ def create_invite(
     token = secrets.token_urlsafe(32)
 
     access_days = body.access_days if (role == "client" and body.access_days and body.access_days > 0) else None
+    daily_limit = validate_optional_limit(body.daily_request_limit, "Limite diário") if role != "admin" else None
+    max_total = validate_optional_limit(body.max_total_requests, "Limite máximo total") if role != "admin" else None
+    limit_mode = normalize_limit_mode(body.request_limit_mode) if role != "admin" else "strict"
 
     invite = UserInvite(
         token=token,
@@ -65,6 +72,9 @@ def create_invite(
         validity_type=validity,
         expires_at=expires_at,
         access_days=access_days,
+        daily_request_limit=daily_limit,
+        max_total_requests=max_total,
+        request_limit_mode=limit_mode,
         created_at=now,
         created_by_id=current_user.id,
         is_used=False,
@@ -73,7 +83,10 @@ def create_invite(
     db.commit()
     db.refresh(invite)
 
-    logger.info(f"Convite gerado com sucesso pelo admin {current_user.email}: role={role}, validity={validity}")
+    logger.info(
+        f"Convite gerado com sucesso pelo admin {current_user.email}: role={role}, validity={validity}, "
+        f"daily_limit={daily_limit}, max_total={max_total}, mode={limit_mode}"
+    )
 
     base_url = (os.getenv("DASHBOARD_URL") or "https://bussolaastrologica.com.br").rstrip("/")
     invite_path = f"/cadastro?token={invite.token}"
@@ -86,6 +99,9 @@ def create_invite(
         "validity_type": invite.validity_type,
         "expires_at": invite.expires_at.isoformat() + "Z" if invite.expires_at else None,
         "access_days": invite.access_days,
+        "daily_request_limit": invite.daily_request_limit,
+        "max_total_requests": invite.max_total_requests,
+        "request_limit_mode": invite.request_limit_mode or "strict",
         "created_at": invite.created_at.isoformat() + "Z",
         "invite_path": invite_path,
         "invite_url": f"{base_url}{invite_path}",
@@ -142,6 +158,9 @@ def list_invites(
             "validity_type": inv.validity_type,
             "expires_at": inv.expires_at.isoformat() + "Z" if inv.expires_at else None,
             "access_days": inv.access_days,
+            "daily_request_limit": inv.daily_request_limit,
+            "max_total_requests": inv.max_total_requests,
+            "request_limit_mode": inv.request_limit_mode or "strict",
             "created_at": inv.created_at.isoformat() + "Z",
             "is_used": inv.is_used,
             "used_at": inv.used_at.isoformat() + "Z" if inv.used_at else None,
@@ -265,6 +284,9 @@ def _finalize_verified_registration(db: Session, invite: UserInvite, verificatio
         role=invite.role,
         is_active=True,
         access_expires_at=access_expires,
+        daily_request_limit=invite.daily_request_limit if invite.role != "admin" else None,
+        max_total_requests=invite.max_total_requests if invite.role != "admin" else None,
+        request_limit_mode=(invite.request_limit_mode or "strict") if invite.role != "admin" else "strict",
     )
     db.add(new_user)
     db.flush()
@@ -592,6 +614,9 @@ def register_with_invite(
         role=invite.role,
         is_active=True,
         access_expires_at=access_expires,
+        daily_request_limit=invite.daily_request_limit if invite.role != "admin" else None,
+        max_total_requests=invite.max_total_requests if invite.role != "admin" else None,
+        request_limit_mode=(invite.request_limit_mode or "strict") if invite.role != "admin" else "strict",
     )
     db.add(new_user)
     db.flush()

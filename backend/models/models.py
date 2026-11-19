@@ -43,6 +43,9 @@ class User(Base):
     access_expires_at = Column(DateTime, nullable=True)
     allow_multiple_profiles = Column(Boolean, default=False)
     max_extra_profiles = Column(Integer, nullable=True)
+    daily_request_limit = Column(Integer, nullable=True)
+    max_total_requests = Column(Integer, nullable=True)
+    request_limit_mode = Column(String, default="strict")  # strict | quota_then_daily
     email_status = Column(String, default="not_sent")   # not_sent | sent | failed
     email_sent_at = Column(DateTime, nullable=True)
 
@@ -109,6 +112,9 @@ class UserInvite(Base):
     validity_type = Column(String, nullable=False, default="never")
     expires_at = Column(DateTime, nullable=True)
     access_days = Column(Integer, nullable=True)
+    daily_request_limit = Column(Integer, nullable=True)
+    max_total_requests = Column(Integer, nullable=True)
+    request_limit_mode = Column(String, default="strict")
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
     is_used = Column(Boolean, nullable=False, default=False)

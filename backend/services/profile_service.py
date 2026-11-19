@@ -113,6 +113,9 @@ def serialize_panel_user(
         "access_expired": is_user_access_expired(u),
         "allow_multiple_profiles": user_can_create_multiple_profiles(u),
         "max_extra_profiles": get_max_extra_profiles(u),
+        "daily_request_limit": None if u.role == "admin" else getattr(u, "daily_request_limit", None),
+        "max_total_requests": None if u.role == "admin" else getattr(u, "max_total_requests", None),
+        "request_limit_mode": "strict" if u.role == "admin" else (getattr(u, "request_limit_mode", None) or "strict"),
     }
     if include_birth_summary:
         payload["created_at"] = u.created_at.isoformat() if u.created_at else None

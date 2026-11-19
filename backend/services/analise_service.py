@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from models.models import Analise, User
 from services.profile_service import resolve_birth_target
+from services.request_limit_service import require_within_request_limits
 from services.transit_service import (
     calcular_transitos,
     calcular_movimentos_periodo,
@@ -128,6 +129,7 @@ async def gerar_analise(
     pergunta: str | None = None,
     forcar: bool = False,
     profile_id: str | None = None,
+    check_limits: bool = False,
 ) -> dict:
     """Calcula (ou devolve do cache) a leitura de trânsitos de uma data ou período."""
     hoje = date.today()
@@ -188,6 +190,9 @@ async def gerar_analise(
     if existente and not forcar and existente.status != "erro" and mesmo_contexto:
         logger.info("Análise em cache: user='%s' data=%s fim=%s", user.name, data_alvo, fim_iso)
         return serializar(existente, hora_conhecida)
+
+    if check_limits:
+        require_within_request_limits(user, db)
 
     tz_str = getattr(target_person, "tz_str", None) or "America/Sao_Paulo"
     try:

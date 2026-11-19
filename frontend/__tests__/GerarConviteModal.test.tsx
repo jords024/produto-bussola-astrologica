@@ -101,6 +101,7 @@ describe("GerarConviteModal Component", () => {
 
     render(<GerarConviteModal isOpen={true} onClose={vi.fn()} />);
 
+    fireEvent.click(screen.getByTestId("invite-tab-acesso"));
     fireEvent.click(screen.getByTestId("invite-access-days-30"));
     fireEvent.click(screen.getByTestId("submit-generate-invite-btn"));
 
@@ -111,5 +112,48 @@ describe("GerarConviteModal Component", () => {
         access_days: 30,
       });
     });
+  });
+
+  it("permite definir limite diário e limite máximo total ao gerar convite", async () => {
+    (api.post as any).mockResolvedValue({
+      token: "tk-lim",
+      role: "client",
+      role_label: "Aluno",
+      validity_type: "never",
+      expires_at: null,
+      daily_request_limit: 8,
+      max_total_requests: 120,
+      invite_path: "/cadastro?token=tk-lim",
+    });
+
+    render(<GerarConviteModal isOpen={true} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("invite-tab-limites"));
+    fireEvent.click(screen.getByTestId("daily-limit-custom-btn"));
+    fireEvent.change(screen.getByTestId("daily-limit-input"), { target: { value: "8" } });
+    fireEvent.click(screen.getByTestId("total-limit-custom-btn"));
+    fireEvent.change(screen.getByTestId("total-limit-input"), { target: { value: "120" } });
+    fireEvent.click(screen.getByTestId("submit-generate-invite-btn"));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith("/admin/invites", {
+        role: "client",
+        validity_type: "never",
+        daily_request_limit: 8,
+        max_total_requests: 120,
+      });
+    });
+  });
+
+  it("organiza o popup de convite em 3 abas para aluno e oculta abas exclusivas ao escolher Admin", () => {
+    render(<GerarConviteModal isOpen={true} onClose={vi.fn()} />);
+
+    expect(screen.getByTestId("invite-tab-panel-geral")).toBeDefined();
+    expect(screen.getByTestId("invite-tab-acesso")).toBeDefined();
+    expect(screen.getByTestId("invite-tab-limites")).toBeDefined();
+
+    fireEvent.click(screen.getByTestId("role-option-admin"));
+    expect(screen.queryByTestId("invite-tab-acesso")).toBeNull();
+    expect(screen.queryByTestId("invite-tab-limites")).toBeNull();
   });
 });

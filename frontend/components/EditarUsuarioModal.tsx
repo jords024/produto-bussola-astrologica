@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 import { toast } from "@/components/Toast";
 import AccessExpirationSelector, { type AccessPreset } from "@/components/AccessExpirationSelector";
 import MultipleProfilesPermissionFields from "@/components/MultipleProfilesPermissionFields";
+import RequestLimitsFields, { type RequestLimitMode } from "@/components/RequestLimitsFields";
+import EditarUsuarioDadosTab, { type EditableUserRole } from "@/components/EditarUsuarioDadosTab";
 
 export interface UserToEdit {
   id: string;
@@ -19,6 +21,9 @@ export interface UserToEdit {
   access_expired?: boolean;
   allow_multiple_profiles?: boolean;
   max_extra_profiles?: number | null;
+  daily_request_limit?: number | null;
+  max_total_requests?: number | null;
+  request_limit_mode?: RequestLimitMode;
 }
 
 interface EditarUsuarioModalProps {
@@ -28,6 +33,8 @@ interface EditarUsuarioModalProps {
   onUserUpdated: () => void;
 }
 
+type EditTab = "dados" | "acesso" | "limites";
+
 export default function EditarUsuarioModal({
   isOpen,
   user,
@@ -35,16 +42,22 @@ export default function EditarUsuarioModal({
   onUserUpdated,
 }: EditarUsuarioModalProps) {
   const [mounted, setMounted] = useState(false);
+  const [activeTab, setActiveTab] = useState<EditTab>("dados");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
-  const [role, setRole] = useState<"client" | "admin">("client");
+  const [role, setRole] = useState<EditableUserRole>("client");
   const [isActive, setIsActive] = useState(true);
   const [accessPreset, setAccessPreset] = useState<AccessPreset>("lifetime");
   const [customExpiresDate, setCustomExpiresDate] = useState("");
   const [allowMultiple, setAllowMultiple] = useState(false);
   const [unlimitedProfiles, setUnlimitedProfiles] = useState(true);
   const [maxExtraProfiles, setMaxExtraProfiles] = useState("3");
+  const [limitMode, setLimitMode] = useState<RequestLimitMode>("strict");
+  const [unlimitedDaily, setUnlimitedDaily] = useState(true);
+  const [dailyLimit, setDailyLimit] = useState("8");
+  const [unlimitedTotal, setUnlimitedTotal] = useState(true);
+  const [totalLimit, setTotalLimit] = useState("100");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -53,6 +66,7 @@ export default function EditarUsuarioModal({
 
   useEffect(() => {
     if (user) {
+      setActiveTab("dados");
       setName(user.name || "");
       setEmail(user.email || "");
       setWhatsapp(user.whatsapp || "");
@@ -73,8 +87,29 @@ export default function EditarUsuarioModal({
         setUnlimitedProfiles(true);
         setMaxExtraProfiles("3");
       }
+      setLimitMode(user.request_limit_mode === "quota_then_daily" ? "quota_then_daily" : "strict");
+      if (user.daily_request_limit && user.daily_request_limit > 0) {
+        setUnlimitedDaily(false);
+        setDailyLimit(String(user.daily_request_limit));
+      } else {
+        setUnlimitedDaily(true);
+        setDailyLimit("8");
+      }
+      if (user.max_total_requests && user.max_total_requests > 0) {
+        setUnlimitedTotal(false);
+        setTotalLimit(String(user.max_total_requests));
+      } else {
+        setUnlimitedTotal(true);
+        setTotalLimit("100");
+      }
     }
   }, [user]);
+
+  useEffect(() => {
+    if (role === "admin" && activeTab !== "dados") {
+      setActiveTab("dados");
+    }
+  }, [role, activeTab]);
 
   if (!isOpen || !mounted || !user) return null;
 
@@ -87,11 +122,13 @@ export default function EditarUsuarioModal({
     }
 
     if (!name.trim()) {
+      setActiveTab("dados");
       toast.error("Informe o nome do usuário.");
       return;
     }
 
     if (!email.trim()) {
+      setActiveTab("dados");
       toast.error("Informe um e-mail válido.");
       return;
     }
@@ -121,6 +158,15 @@ export default function EditarUsuarioModal({
             payload.max_extra_profiles = Math.max(1, Number(maxExtraProfiles) || 1);
           }
         }
+        payload.request_limit_mode = limitMode;
+        payload.unlimited_daily_requests = unlimitedDaily;
+        if (!unlimitedDaily) {
+          payload.daily_request_limit = Math.max(1, Number(dailyLimit) || 1);
+        }
+        payload.unlimited_total_requests = unlimitedTotal;
+        if (!unlimitedTotal) {
+          payload.max_total_requests = Math.max(1, Number(totalLimit) || 1);
+        }
       }
 
       await api.put(`/admin/users/${user.id}`, payload);
@@ -135,10 +181,21 @@ export default function EditarUsuarioModal({
     }
   };
 
+  const hasCustomLimits = !unlimitedDaily || !unlimitedTotal;
+
+  const tabs: { id: EditTab; label: string; icon: string; badge?: boolean }[] =
+    role === "admin"
+      ? [{ id: "dados", label: "Dados e Papel", icon: "👤" }]
+      : [
+          { id: "dados", label: "Dados e Papel", icon: "👤" },
+          { id: "acesso", label: "Acesso e Perfis", icon: "⏳" },
+          { id: "limites", label: "Limites de IA", icon: "⚡", badge: hasCustomLimits },
+        ];
+
   const modalContent = (
     <div
       data-testid="editar-usuario-modal-backdrop"
-      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"
       style={{
         position: "fixed",
         top: 0,
@@ -149,241 +206,154 @@ export default function EditarUsuarioModal({
     >
       <div
         data-testid="editar-usuario-modal-panel"
-        className="relative w-full max-w-lg rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl border my-auto"
+        className="relative w-full max-w-xl max-h-[90vh] flex flex-col rounded-3xl shadow-2xl border overflow-hidden"
         style={{
           background: "linear-gradient(180deg, #1d1838 0%, #130f26 100%)",
           borderColor: "rgba(127, 119, 221, 0.35)",
           boxShadow: "0 25px 60px -15px rgba(0, 0, 0, 0.9), 0 0 40px rgba(127, 119, 221, 0.2)",
         }}
       >
-        {/* Cabeçalho */}
-        <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
-          <div>
-            <h3 className="text-xl font-bold tracking-tight" style={{ color: "#f0eeff" }}>
-              Editar Usuário
-            </h3>
-            <p className="text-xs mt-1" style={{ color: "#8b87b8" }}>
-              Atualize os dados cadastrais, cargo e permissões do usuário.
-            </p>
+        {/* Cabeçalho fixo */}
+        <div className="px-6 sm:px-8 pt-6 pb-4 border-b border-white/10 shrink-0 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-xl font-bold tracking-tight" style={{ color: "#f0eeff" }}>
+                Editar Usuário
+              </h3>
+              <p className="text-xs mt-1" style={{ color: "#8b87b8" }}>
+                Atualize os dados cadastrais, cargo e permissões do usuário.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              data-testid="close-edit-user-modal-btn"
+              onClick={onClose}
+              className="p-2 rounded-xl text-xs transition-colors hover:bg-white/10 cursor-pointer"
+              style={{ color: "#8b87b8" }}
+              title="Fechar"
+            >
+              ✕
+            </button>
           </div>
 
-          <button
-            type="button"
-            data-testid="close-edit-user-modal-btn"
-            onClick={onClose}
-            className="p-2 rounded-xl text-xs transition-colors hover:bg-white/10 cursor-pointer"
-            style={{ color: "#8b87b8" }}
-            title="Fechar"
-          >
-            ✕
-          </button>
+          {/* Barra de Abas */}
+          {!user.is_super_admin && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-0.5" role="tablist">
+              {tabs.map((tab) => {
+                const isActiveTab = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActiveTab}
+                    data-testid={`edit-tab-${tab.id}`}
+                    onClick={() => setActiveTab(tab.id)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer"
+                    style={{
+                      background: isActiveTab
+                        ? "linear-gradient(135deg, rgba(127, 119, 221, 0.32), rgba(60, 52, 137, 0.45))"
+                        : "rgba(255, 255, 255, 0.04)",
+                      color: isActiveTab ? "#f0eeff" : "#8b87b8",
+                      border: isActiveTab
+                        ? "1px solid rgba(127, 119, 221, 0.6)"
+                        : "1px solid rgba(255, 255, 255, 0.08)",
+                    }}
+                  >
+                    <span>{tab.icon}</span>
+                    <span>{tab.label}</span>
+                    {tab.badge && (
+                      <span
+                        className="w-1.5 h-1.5 rounded-full"
+                        style={{ background: "#38bdf8" }}
+                        title="Limite personalizado ativo"
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {user.is_super_admin ? (
-          <div
-            data-testid="super-admin-protected-warning"
-            className="p-4 rounded-2xl border text-sm"
-            style={{
-              background: "rgba(239, 159, 39, 0.1)",
-              borderColor: "rgba(239, 159, 39, 0.3)",
-              color: "#EF9F27",
-            }}
-          >
-            👑 <strong>Super Admin do Sistema:</strong> Este usuário é o administrador principal configurado nas variáveis de ambiente. Suas credenciais não podem ser alteradas pelo painel por motivos de integridade e segurança.
+          <div className="p-6 sm:p-8">
+            <div
+              data-testid="super-admin-protected-warning"
+              className="p-4 rounded-2xl border text-sm"
+              style={{
+                background: "rgba(239, 159, 39, 0.1)",
+                borderColor: "rgba(239, 159, 39, 0.3)",
+                color: "#EF9F27",
+              }}
+            >
+              👑 <strong>Super Admin do Sistema:</strong> Este usuário é o administrador principal configurado nas variáveis de ambiente. Suas credenciais não podem ser alteradas pelo painel por motivos de integridade e segurança.
+            </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Nome */}
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#AFA9EC" }}>
-                Nome Completo *
-              </label>
-              <input
-                data-testid="edit-user-name-input"
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ex: João da Silva"
-                className="w-full rounded-xl px-3.5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-purple-400"
-                style={{
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(127, 119, 221, 0.3)",
-                  color: "#f0eeff",
-                }}
-              />
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            {/* Conteúdo rolável da aba ativa */}
+            <div className="px-6 sm:px-8 py-5 overflow-y-auto flex-1 space-y-4">
+              {activeTab === "dados" && (
+                <EditarUsuarioDadosTab
+                  name={name}
+                  onNameChange={setName}
+                  email={email}
+                  onEmailChange={setEmail}
+                  whatsapp={whatsapp}
+                  onWhatsappChange={setWhatsapp}
+                  role={role}
+                  onRoleChange={setRole}
+                  isActive={isActive}
+                  onIsActiveChange={setIsActive}
+                />
+              )}
+
+              {activeTab === "acesso" && (
+                <div data-testid="edit-tab-panel-acesso" className="space-y-4">
+                  <AccessExpirationSelector
+                    role={role}
+                    preset={accessPreset}
+                    customDate={customExpiresDate}
+                    currentExpiresAt={user.access_expires_at}
+                    onChangePreset={setAccessPreset}
+                    onChangeCustomDate={setCustomExpiresDate}
+                  />
+
+                  <MultipleProfilesPermissionFields
+                    role={role}
+                    allowMultiple={allowMultiple}
+                    onAllowChange={setAllowMultiple}
+                    unlimited={unlimitedProfiles}
+                    onUnlimitedChange={setUnlimitedProfiles}
+                    maxLimit={maxExtraProfiles}
+                    onMaxLimitChange={setMaxExtraProfiles}
+                  />
+                </div>
+              )}
+
+              {activeTab === "limites" && (
+                <div data-testid="edit-tab-panel-limites" className="space-y-4">
+                  <RequestLimitsFields
+                    role={role}
+                    limitMode={limitMode}
+                    onLimitModeChange={setLimitMode}
+                    unlimitedDaily={unlimitedDaily}
+                    onUnlimitedDailyChange={setUnlimitedDaily}
+                    dailyLimit={dailyLimit}
+                    onDailyLimitChange={setDailyLimit}
+                    unlimitedTotal={unlimitedTotal}
+                    onUnlimitedTotalChange={setUnlimitedTotal}
+                    totalLimit={totalLimit}
+                    onTotalLimitChange={setTotalLimit}
+                  />
+                </div>
+              )}
             </div>
 
-            {/* E-mail */}
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#AFA9EC" }}>
-                E-mail *
-              </label>
-              <input
-                data-testid="edit-user-email-input"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="usuario@exemplo.com"
-                className="w-full rounded-xl px-3.5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-purple-400"
-                style={{
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(127, 119, 221, 0.3)",
-                  color: "#f0eeff",
-                }}
-              />
-            </div>
-
-            {/* WhatsApp */}
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#AFA9EC" }}>
-                WhatsApp / Telefone (Opcional)
-              </label>
-              <input
-                data-testid="edit-user-whatsapp-input"
-                type="text"
-                value={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.value)}
-                placeholder="5511999999999"
-                className="w-full rounded-xl px-3.5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-purple-400"
-                style={{
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(127, 119, 221, 0.3)",
-                  color: "#f0eeff",
-                }}
-              />
-            </div>
-
-            {/* Tipo de Usuário (Role) */}
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#AFA9EC" }}>
-                Tipo de Acesso (Papel)
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <button
-                  type="button"
-                  data-testid="edit-role-client-btn"
-                  onClick={() => setRole("client")}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    role === "client" ? "ring-2 ring-purple-400" : "opacity-75"
-                  }`}
-                  style={{
-                    background: role === "client" ? "rgba(127, 119, 221, 0.2)" : "rgba(255, 255, 255, 0.03)",
-                    borderColor: role === "client" ? "#7F77DD" : "rgba(127, 119, 221, 0.2)",
-                  }}
-                >
-                  <div className="font-semibold text-xs" style={{ color: "#f0eeff" }}>
-                    🎓 Aluno (Cliente)
-                  </div>
-                  <div className="text-[11px] mt-0.5" style={{ color: "#8b87b8" }}>
-                    Acesso à área de membros e mapa
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  data-testid="edit-role-internal_client-btn"
-                  onClick={() => setRole("internal_client")}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    role === "internal_client" ? "ring-2 ring-sky-400" : "opacity-75"
-                  }`}
-                  style={{
-                    background: role === "internal_client" ? "rgba(56, 189, 248, 0.14)" : "rgba(255, 255, 255, 0.03)",
-                    borderColor: role === "internal_client" ? "#38bdf8" : "rgba(127, 119, 221, 0.2)",
-                  }}
-                >
-                  <div className="font-semibold text-xs" style={{ color: "#38bdf8" }}>
-                    🧪 Aluno Interno
-                  </div>
-                  <div className="text-[11px] mt-0.5" style={{ color: "#8b87b8" }}>
-                    Visão de aluno (sem sujar financeiro)
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  data-testid="edit-role-admin-btn"
-                  onClick={() => setRole("admin")}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    role === "admin" ? "ring-2 ring-amber-400" : "opacity-75"
-                  }`}
-                  style={{
-                    background: role === "admin" ? "rgba(239, 159, 39, 0.15)" : "rgba(255, 255, 255, 0.03)",
-                    borderColor: role === "admin" ? "#EF9F27" : "rgba(127, 119, 221, 0.2)",
-                  }}
-                >
-                  <div className="font-semibold text-xs" style={{ color: "#EF9F27" }}>
-                    🛡️ Administrador
-                  </div>
-                  <div className="text-[11px] mt-0.5" style={{ color: "#8b87b8" }}>
-                    Acesso completo ao painel admin
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            {/* Status da Conta */}
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#AFA9EC" }}>
-                Status da Conta
-              </label>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  data-testid="edit-status-active-btn"
-                  onClick={() => setIsActive(true)}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
-                    isActive ? "ring-2 ring-emerald-400" : "opacity-70"
-                  }`}
-                  style={{
-                    background: isActive ? "rgba(52, 211, 153, 0.2)" : "rgba(255, 255, 255, 0.03)",
-                    borderColor: isActive ? "#34d399" : "rgba(127, 119, 221, 0.2)",
-                    color: isActive ? "#34d399" : "#8b87b8",
-                  }}
-                >
-                  ● Ativo
-                </button>
-
-                <button
-                  type="button"
-                  data-testid="edit-status-inactive-btn"
-                  onClick={() => setIsActive(false)}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
-                    !isActive ? "ring-2 ring-rose-400" : "opacity-70"
-                  }`}
-                  style={{
-                    background: !isActive ? "rgba(244, 63, 94, 0.2)" : "rgba(255, 255, 255, 0.03)",
-                    borderColor: !isActive ? "#f43f5e" : "rgba(127, 119, 221, 0.2)",
-                    color: !isActive ? "#f43f5e" : "#8b87b8",
-                  }}
-                >
-                  ✕ Inativo
-                </button>
-              </div>
-            </div>
-
-            <AccessExpirationSelector
-              role={role}
-              preset={accessPreset}
-              customDate={customExpiresDate}
-              currentExpiresAt={user.access_expires_at}
-              onChangePreset={setAccessPreset}
-              onChangeCustomDate={setCustomExpiresDate}
-            />
-
-            <MultipleProfilesPermissionFields
-              role={role}
-              allowMultiple={allowMultiple}
-              onAllowChange={setAllowMultiple}
-              unlimited={unlimitedProfiles}
-              onUnlimitedChange={setUnlimitedProfiles}
-              maxLimit={maxExtraProfiles}
-              onMaxLimitChange={setMaxExtraProfiles}
-            />
-
-            {/* Ações */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+            {/* Rodapé fixo */}
+            <div className="px-6 sm:px-8 py-4 border-t border-white/10 shrink-0 flex items-center justify-end gap-3">
               <button
                 type="button"
                 data-testid="cancel-edit-user-btn"
@@ -396,9 +366,9 @@ export default function EditarUsuarioModal({
 
               <button
                 type="submit"
-                disabled={loading}
                 data-testid="save-edit-user-btn"
-                className="px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-purple-500/20 active:scale-95 cursor-pointer disabled:opacity-50"
+                disabled={loading}
+                className="px-6 py-2.5 rounded-xl text-xs font-semibold transition-all shadow-lg hover:brightness-110 active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-2"
                 style={{
                   background: "linear-gradient(135deg, #7F77DD, #534ab3)",
                   color: "#ffffff",

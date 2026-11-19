@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { toast } from "@/components/Toast";
 import FinanceiroUserReportsModal from "./FinanceiroUserReportsModal";
 import FinanceiroSelectionPopup from "./FinanceiroSelectionPopup";
+import FinanceiroLoadingPopup from "./FinanceiroLoadingPopup";
 import PaginationControls from "@/components/PaginationControls";
 
 export interface FinanceiroUserItem {
@@ -501,6 +502,12 @@ export default function Financeiro() {
       <FinanceiroSelectionPopup
         selectedUsers={selectedUsersForPopup}
         onClearSelection={() => setSelectedUserKeys([])}
+      />
+
+      <FinanceiroLoadingPopup
+        isOpen={loading}
+        title="Atualizando Financeiro"
+        message="Ordenando gastos e consolidando leituras do período..."
       />
     </div>
   );

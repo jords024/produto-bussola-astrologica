@@ -111,3 +111,25 @@ Este documento registra todas as alterações estruturais realizadas nas tabelas
 
 
 
+
+---
+
+### [2026-11-19] Limites de Requisições de IA por Aluno (`users` e `user_invites`)
+- **Tabelas Afetadas:** `users`, `user_invites`
+- **Objetivo:** Permitir configurar limite diário (reset à meia-noite no horário de Brasília) e limite máximo total de novas gerações de Leitura do Dia feitas por IA por aluno, tanto pelo painel quanto via API externa (`X-API-Key`). `NULL` indica ilimitado.
+- **Colunas Criadas:**
+  - `users.daily_request_limit` (INTEGER, Nullable — `NULL` indica ilimitado)
+  - `users.max_total_requests` (INTEGER, Nullable — `NULL` indica ilimitado)
+  - `user_invites.daily_request_limit` (INTEGER, Nullable — aplicado automaticamente ao usuário no cadastro via convite)
+  - `user_invites.max_total_requests` (INTEGER, Nullable — aplicado automaticamente ao usuário no cadastro via convite)
+- **Script de Migração:** `backend/scripts/add_request_limits_columns.py`
+
+---
+
+### [2026-11-19] Modo de Limite de Requisições (`request_limit_mode` em `users` e `user_invites`)
+- **Tabelas Afetadas:** `users`, `user_invites`
+- **Objetivo:** Permitir escolher por aluno/convite entre o modo rígido (`strict` — bloqueia ao atingir o total) e o modo franquia + diário (`quota_then_daily` — uso livre até atingir `max_total_requests` e depois entra em `daily_request_limit` por dia com reset à meia-noite de Brasília).
+- **Colunas Criadas:**
+  - `users.request_limit_mode` (VARCHAR, Default `'strict'`)
+  - `user_invites.request_limit_mode` (VARCHAR, Default `'strict'`)
+- **Script de Migração:** `backend/scripts/add_request_limit_mode_column.py`

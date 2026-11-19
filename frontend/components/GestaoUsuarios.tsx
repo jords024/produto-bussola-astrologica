@@ -9,6 +9,7 @@ import ListaConvites from "@/components/ListaConvites";
 import EditarUsuarioModal, { UserToEdit } from "@/components/EditarUsuarioModal";
 import ConfirmDeleteModal from "@/components/ConfirmDeleteModal";
 import PaginationControls from "@/components/PaginationControls";
+import UsersMetricsCards from "@/components/UsersMetricsCards";
 import UsuarioCard from "@/components/UsuarioCard";
 import RedefinirSenhaModal from "@/components/RedefinirSenhaModal";
 
@@ -28,6 +29,9 @@ export interface PanelUser {
   access_expired?: boolean;
   allow_multiple_profiles?: boolean;
   max_extra_profiles?: number | null;
+  daily_request_limit?: number | null;
+  max_total_requests?: number | null;
+  request_limit_mode?: "strict" | "quota_then_daily";
 }
 
 export default function GestaoUsuarios() {
@@ -129,7 +133,8 @@ export default function GestaoUsuarios() {
 
   const totalUsers = users.length;
   const adminCount = users.filter((u) => u.role === "admin").length;
-  const clientCount = users.filter((u) => u.role !== "admin").length;
+  const clientCount = users.filter((u) => u.role === "client").length;
+  const internalClientCount = users.filter((u) => u.role === "internal_client").length;
 
   const totalPages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
   const pagedUsers = users.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -301,22 +306,12 @@ export default function GestaoUsuarios() {
       ) : (
         <>
           {/* Cards de Métricas */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-5 rounded-2xl space-y-1" style={{ background: "#1a1535", border: "1px solid rgba(127, 119, 221, 0.2)" }}>
-              <span className="text-xs" style={{ color: "#8b87b8" }}>Total de Usuários</span>
-              <div className="text-2xl font-bold" style={{ color: "#f0eeff" }}>{totalUsers}</div>
-            </div>
-
-            <div className="p-5 rounded-2xl space-y-1" style={{ background: "#1a1535", border: "1px solid rgba(127, 119, 221, 0.2)" }}>
-              <span className="text-xs" style={{ color: "#8b87b8" }}>Administradores</span>
-              <div className="text-2xl font-bold" style={{ color: "#EF9F27" }}>{adminCount}</div>
-            </div>
-
-            <div className="p-5 rounded-2xl space-y-1" style={{ background: "#1a1535", border: "1px solid rgba(127, 119, 221, 0.2)" }}>
-              <span className="text-xs" style={{ color: "#8b87b8" }}>Clientes Registrados</span>
-              <div className="text-2xl font-bold" style={{ color: "#34d399" }}>{clientCount}</div>
-            </div>
-          </div>
+          <UsersMetricsCards
+            totalUsers={totalUsers}
+            adminCount={adminCount}
+            clientCount={clientCount}
+            internalClientCount={internalClientCount}
+          />
 
       {/* Barra de Filtros */}
       <div
@@ -352,7 +347,8 @@ export default function GestaoUsuarios() {
         >
           <option value="">Todos os Papéis</option>
           <option value="admin">Administrador</option>
-          <option value="client">Cliente</option>
+          <option value="client">Aluno</option>
+          <option value="internal_client">Aluno Interno</option>
         </select>
       </div>
 

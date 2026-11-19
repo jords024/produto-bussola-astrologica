@@ -158,6 +158,29 @@ export default function UsuarioCard({
                   : `⏳ Até ${new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(u.access_expires_at))}`}
               </span>
             )}
+
+            {/* Badges de Limite de Requisições IA */}
+            {!isAdmin && (u.daily_request_limit || u.max_total_requests) && (
+              <span
+                data-testid={`badge-limits-${u.id}`}
+                className="text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1"
+                style={{
+                  background: "rgba(127, 119, 221, 0.16)",
+                  color: "#c4b5fd",
+                  border: "1px solid rgba(127, 119, 221, 0.35)",
+                }}
+              >
+                ⚡{" "}
+                {u.request_limit_mode === "quota_then_daily" && u.max_total_requests && u.daily_request_limit
+                  ? `${u.max_total_requests} livres → ${u.daily_request_limit}/dia`
+                  : [
+                      u.daily_request_limit ? `${u.daily_request_limit}/dia` : null,
+                      u.max_total_requests ? `${u.max_total_requests} total` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+              </span>
+            )}
           </div>
 
           <div className="text-xs" style={{ color: "#8b87b8" }}>
