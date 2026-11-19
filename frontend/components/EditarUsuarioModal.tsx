@@ -56,7 +56,7 @@ export default function EditarUsuarioModal({
       setName(user.name || "");
       setEmail(user.email || "");
       setWhatsapp(user.whatsapp || "");
-      setRole(user.role === "admin" ? "admin" : "client");
+      setRole(user.role === "admin" ? "admin" : user.role === "internal_client" ? "internal_client" : "client");
       setIsActive(user.is_active ?? true);
       if (user.access_expires_at) {
         setAccessPreset("custom");
@@ -113,7 +113,7 @@ export default function EditarUsuarioModal({
         payload.access_days = Number(accessPreset);
       }
 
-      if (role === "client") {
+      if (role !== "admin") {
         payload.allow_multiple_profiles = allowMultiple;
         if (allowMultiple) {
           payload.unlimited_extra_profiles = unlimitedProfiles;
@@ -260,7 +260,7 @@ export default function EditarUsuarioModal({
               <label className="block text-xs font-medium mb-1.5" style={{ color: "#AFA9EC" }}>
                 Tipo de Acesso (Papel)
               </label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <button
                   type="button"
                   data-testid="edit-role-client-btn"
@@ -278,6 +278,26 @@ export default function EditarUsuarioModal({
                   </div>
                   <div className="text-[11px] mt-0.5" style={{ color: "#8b87b8" }}>
                     Acesso à área de membros e mapa
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="edit-role-internal_client-btn"
+                  onClick={() => setRole("internal_client")}
+                  className={`p-3 rounded-xl border text-left transition-all ${
+                    role === "internal_client" ? "ring-2 ring-sky-400" : "opacity-75"
+                  }`}
+                  style={{
+                    background: role === "internal_client" ? "rgba(56, 189, 248, 0.14)" : "rgba(255, 255, 255, 0.03)",
+                    borderColor: role === "internal_client" ? "#38bdf8" : "rgba(127, 119, 221, 0.2)",
+                  }}
+                >
+                  <div className="font-semibold text-xs" style={{ color: "#38bdf8" }}>
+                    🧪 Aluno Interno
+                  </div>
+                  <div className="text-[11px] mt-0.5" style={{ color: "#8b87b8" }}>
+                    Visão de aluno (sem sujar financeiro)
                   </div>
                 </button>
 

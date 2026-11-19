@@ -23,6 +23,7 @@ export default function UsuarioCard({
   formatBrasiliaDate,
 }: UsuarioCardProps) {
   const isAdmin = u.role === "admin";
+  const isInternalClient = u.role === "internal_client";
 
   return (
     <div
@@ -95,12 +96,22 @@ export default function UsuarioCard({
               <span
                 className="text-[11px] px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1"
                 style={{
-                  background: isAdmin ? "rgba(239, 159, 39, 0.15)" : "rgba(52, 211, 153, 0.15)",
-                  color: isAdmin ? "#EF9F27" : "#34d399",
-                  border: `1px solid ${isAdmin ? "rgba(239, 159, 39, 0.3)" : "rgba(52, 211, 153, 0.3)"}`,
+                  background: isAdmin
+                    ? "rgba(239, 159, 39, 0.15)"
+                    : isInternalClient
+                    ? "rgba(56, 189, 248, 0.15)"
+                    : "rgba(52, 211, 153, 0.15)",
+                  color: isAdmin ? "#EF9F27" : isInternalClient ? "#38bdf8" : "#34d399",
+                  border: `1px solid ${
+                    isAdmin
+                      ? "rgba(239, 159, 39, 0.3)"
+                      : isInternalClient
+                      ? "rgba(56, 189, 248, 0.35)"
+                      : "rgba(52, 211, 153, 0.3)"
+                  }`,
                 }}
               >
-                {isAdmin ? "🛡️ Administrador" : "🎓 Aluno"}
+                {isAdmin ? "🛡️ Administrador" : isInternalClient ? "🧪 Aluno Interno" : "🎓 Aluno"}
               </span>
             )}
 

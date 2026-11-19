@@ -89,7 +89,7 @@ export default function CriarUsuarioModal({
         password,
         role,
       };
-      if (role === "client") {
+      if (role !== "admin") {
         if (accessPreset === "custom" && customExpiresDate) {
           payload.access_expires_at = customExpiresDate;
         } else if (accessPreset !== "lifetime" && accessPreset !== "custom") {
@@ -248,7 +248,7 @@ export default function CriarUsuarioModal({
             <label className="text-xs font-semibold uppercase tracking-wider block" style={{ color: "#8b87b8" }}>
               Tipo de Usuário
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
                 type="button"
                 data-testid="create-user-role-client"
@@ -265,6 +265,25 @@ export default function CriarUsuarioModal({
                 </div>
                 <div className="text-[11px] mt-0.5" style={{ color: "#8b87b8" }}>
                   Acesso à área de membros
+                </div>
+              </button>
+
+              <button
+                type="button"
+                data-testid="create-user-role-internal_client"
+                onClick={() => setRole("internal_client")}
+                className="p-3 rounded-xl text-left transition-all cursor-pointer"
+                style={{
+                  background: role === "internal_client" ? "rgba(56, 189, 248, 0.14)" : "rgba(255, 255, 255, 0.03)",
+                  border: role === "internal_client" ? "1px solid rgba(56, 189, 248, 0.55)" : "1px solid rgba(255, 255, 255, 0.08)",
+                  color: "#f0eeff",
+                }}
+              >
+                <div className="text-sm font-bold flex items-center gap-1.5">
+                  <span>🧪</span> Aluno Interno
+                </div>
+                <div className="text-[11px] mt-0.5" style={{ color: "#8b87b8" }}>
+                  Visão de aluno (sem sujar financeiro)
                 </div>
               </button>
 

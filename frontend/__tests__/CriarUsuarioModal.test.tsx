@@ -151,4 +151,26 @@ describe("CriarUsuarioModal Component", () => {
       });
     });
   });
+
+  it("permite criar usuário do tipo Aluno Interno (internal_client)", async () => {
+    (api.post as any).mockResolvedValue({ success: true });
+
+    render(<CriarUsuarioModal isOpen={true} onClose={onClose} onUserCreated={onUserCreated} />);
+
+    fireEvent.change(screen.getByTestId("create-user-name-input"), { target: { value: "Admin Teste Visão" } });
+    fireEvent.change(screen.getByTestId("create-user-email-input"), { target: { value: "interno@exemplo.com" } });
+    fireEvent.change(screen.getByTestId("create-user-password-input"), { target: { value: "SenhaForte@123" } });
+    fireEvent.click(screen.getByTestId("create-user-role-internal_client"));
+    fireEvent.click(screen.getByTestId("submit-create-user-btn"));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith("/admin/users", {
+        name: "Admin Teste Visão",
+        email: "interno@exemplo.com",
+        whatsapp: null,
+        password: "SenhaForte@123",
+        role: "internal_client",
+      });
+    });
+  });
 });

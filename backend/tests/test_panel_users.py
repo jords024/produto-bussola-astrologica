@@ -545,5 +545,42 @@ def test_batch_delete_user_with_analises_succeeds():
         db.close()
 
 
+def test_create_and_update_internal_client_user():
+    token = get_admin_token()
+    tag = uuid.uuid4().hex[:8]
+    email = f"testpaneluser_internal_{tag}@exemplo.com"
+
+    res_create = client.post(
+        "/admin/users",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "name": "Admin Visão Aluno",
+            "email": email,
+            "password": "SenhaForte@123",
+            "role": "internal_client",
+        },
+    )
+    assert res_create.status_code == 201
+    created_user = res_create.json()["user"]
+    assert created_user["role"] == "internal_client"
+    uid = created_user["id"]
+
+    res_update = client.put(
+        f"/admin/users/{uid}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"role": "client"},
+    )
+    assert res_update.status_code == 200
+    assert res_update.json()["user"]["role"] == "client"
+
+    res_update_back = client.put(
+        f"/admin/users/{uid}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"role": "internal_client"},
+    )
+    assert res_update_back.status_code == 200
+    assert res_update_back.json()["user"]["role"] == "internal_client"
+
+
 
 

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { toast } from "@/components/Toast";
 import FinanceiroUserReportsModal from "./FinanceiroUserReportsModal";
+import FinanceiroSelectionPopup from "./FinanceiroSelectionPopup";
 import PaginationControls from "@/components/PaginationControls";
 
 export interface FinanceiroUserItem {
@@ -53,6 +54,7 @@ const PERIOD_OPTIONS = [
 const ROLE_OPTIONS = [
   { id: "all", label: "Todos" },
   { id: "client", label: "Alunos" },
+  { id: "internal_client", label: "Alunos Internos" },
   { id: "admin", label: "Admins" },
   { id: "lead", label: "Leads" },
 ];
@@ -72,6 +74,7 @@ export default function Financeiro() {
   const [roleFilter, setRoleFilter] = useState("all");
   const [sortBy, setSortBy] = useState("highest_cost");
   const [selectedUser, setSelectedUser] = useState<FinanceiroUserItem | null>(null);
+  const [selectedUserKeys, setSelectedUserKeys] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<FinanceiroResponse | null>(null);
@@ -113,6 +116,25 @@ export default function Financeiro() {
 
   const summary = data?.summary;
   const users = data?.users || [];
+  const getUserSelectionKey = (u: FinanceiroUserItem) => u.user_id || u.email;
+  const toggleUserSelection = (key: string) => {
+    setSelectedUserKeys((prev) =>
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
+    );
+  };
+  const selectedUsersForPopup = users.filter((u) =>
+    selectedUserKeys.includes(getUserSelectionKey(u))
+  );
+  const allUsersSelected =
+    users.length > 0 &&
+    users.every((u) => selectedUserKeys.includes(getUserSelectionKey(u)));
+  const toggleSelectAllUsers = () => {
+    if (allUsersSelected) {
+      setSelectedUserKeys([]);
+    } else {
+      setSelectedUserKeys(users.map(getUserSelectionKey));
+    }
+  };
   const totalPages = Math.max(1, Math.ceil(users.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const paginatedUsers = users.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -132,6 +154,13 @@ export default function Financeiro() {
         </span>
       );
     }
+    if (role === "internal_client") {
+      return (
+        <span className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ background: "rgba(56, 189, 248, 0.14)", color: "#38bdf8", border: "1px solid rgba(56, 189, 248, 0.35)" }}>
+          🧪 Aluno Interno
+        </span>
+      );
+    }
     return (
       <span className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ background: "rgba(175, 169, 236, 0.12)", color: "#AFA9EC", border: "1px solid rgba(175, 169, 236, 0.3)" }}>
         ✨ Lead
@@ -140,7 +169,10 @@ export default function Financeiro() {
   };
 
   return (
-    <div data-testid="financeiro-container" className="space-y-6">
+    <div
+      data-testid="financeiro-container"
+      className={`space-y-6 ${selectedUsersForPopup.length > 0 ? "pb-28" : ""}`}
+    >
       {/* Cabeçalho */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -326,6 +358,33 @@ export default function Financeiro() {
         />
       </div>
 
+      {users.length > 0 && (
+        <div className="flex items-center justify-between px-2">
+          <label
+            className="inline-flex items-center gap-2 text-xs font-medium cursor-pointer select-none"
+            style={{ color: "#AFA9EC" }}
+          >
+            <input
+              type="checkbox"
+              data-testid="financeiro-select-all"
+              checked={allUsersSelected}
+              onChange={toggleSelectAllUsers}
+              className="w-4 h-4 rounded accent-[#7F77DD] cursor-pointer"
+            />
+            <span>
+              {allUsersSelected
+                ? `Desmarcar todos (${users.length})`
+                : `Selecionar todos (${users.length})`}
+            </span>
+          </label>
+          {selectedUsersForPopup.length > 0 && (
+            <span className="text-xs" style={{ color: "#8b87b8" }}>
+              {selectedUsersForPopup.length} de {users.length} selecionado(s)
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Lista / Ranking de Consumo por Usuário */}
       <div className="space-y-3">
         {loading && !data ? (
@@ -339,66 +398,82 @@ export default function Financeiro() {
         ) : (
           paginatedUsers.map((u, idx) => {
             const globalPos = (safePage - 1) * pageSize + idx + 1;
+            const selectionKey = getUserSelectionKey(u);
+            const isSelected = selectedUserKeys.includes(selectionKey);
             return (
-              <button
-                key={`${u.user_id || u.email}-${globalPos}`}
-                type="button"
-                data-testid={`financeiro-user-row-${idx}`}
-                onClick={() => setSelectedUser(u)}
-                className="w-full text-left p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 transition-all hover:border-[#7F77DD]/60 hover:bg-[#211b44] cursor-pointer"
+              <div
+                key={`${selectionKey}-${globalPos}`}
+                className="w-full p-4 rounded-2xl flex items-center gap-3 transition-all hover:border-[#7F77DD]/60 hover:bg-[#211b44]"
                 style={{
-                  background: "#1a1535",
-                  border: "1px solid rgba(127, 119, 221, 0.2)",
+                  background: isSelected ? "rgba(127, 119, 221, 0.14)" : "#1a1535",
+                  border: isSelected
+                    ? "1px solid rgba(127, 119, 221, 0.7)"
+                    : "1px solid rgba(127, 119, 221, 0.2)",
                 }}
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                    style={{ background: "rgba(127, 119, 221, 0.2)", color: "#AFA9EC" }}
-                  >
-                    #{globalPos}
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => toggleUserSelection(selectionKey)}
+                  aria-label={`Selecionar ${u.name}`}
+                  data-testid={`financeiro-select-user-${idx}`}
+                  className="w-4 h-4 rounded accent-[#7F77DD] cursor-pointer shrink-0"
+                />
+                <button
+                  type="button"
+                  data-testid={`financeiro-user-row-${idx}`}
+                  onClick={() => setSelectedUser(u)}
+                  className="flex-1 text-left flex flex-wrap items-center justify-between gap-4 cursor-pointer min-w-0"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                      style={{ background: "rgba(127, 119, 221, 0.2)", color: "#AFA9EC" }}
+                    >
+                      #{globalPos}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm truncate" style={{ color: "#f0eeff" }}>
+                          {u.name}
+                        </span>
+                        {getRoleBadge(u.role)}
+                      </div>
+                      <div className="text-xs truncate mt-0.5" style={{ color: "#8b87b8" }}>
+                        {u.email}
+                      </div>
+                    </div>
                   </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-sm truncate" style={{ color: "#f0eeff" }}>
-                      {u.name}
-                    </span>
-                    {getRoleBadge(u.role)}
+
+                  <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs">
+                    <div className="text-right">
+                      <div style={{ color: "#8b87b8" }}>Mapas / Leituras</div>
+                      <div className="font-semibold" style={{ color: "#f0eeff" }}>
+                        {u.maps_count} mapas · {u.readings_count} leituras
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div style={{ color: "#8b87b8" }}>Tokens</div>
+                      <div className="font-semibold" style={{ color: "#AFA9EC" }}>
+                        {formatTokens(u.total_tokens)}
+                      </div>
+                    </div>
+
+                    <div className="text-right min-w-[110px]">
+                      <div className="font-bold text-sm text-emerald-300">
+                        {formatUsd(u.cost_usd)}
+                      </div>
+                      <div className="text-[11px] text-emerald-200/70">
+                        ~{formatBrl(u.cost_brl)}
+                      </div>
+                      <div className="text-[10px] text-[#AFA9EC] mt-0.5">
+                        Ver relatórios →
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-xs truncate mt-0.5" style={{ color: "#8b87b8" }}>
-                    {u.email}
-                  </div>
-                </div>
+                </button>
               </div>
-
-              <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs">
-                <div className="text-right">
-                  <div style={{ color: "#8b87b8" }}>Mapas / Leituras</div>
-                  <div className="font-semibold" style={{ color: "#f0eeff" }}>
-                    {u.maps_count} mapas · {u.readings_count} leituras
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <div style={{ color: "#8b87b8" }}>Tokens</div>
-                  <div className="font-semibold" style={{ color: "#AFA9EC" }}>
-                    {formatTokens(u.total_tokens)}
-                  </div>
-                </div>
-
-                <div className="text-right min-w-[110px]">
-                  <div className="font-bold text-sm text-emerald-300">
-                    {formatUsd(u.cost_usd)}
-                  </div>
-                  <div className="text-[11px] text-emerald-200/70">
-                    ~{formatBrl(u.cost_brl)}
-                  </div>
-                  <div className="text-[10px] text-[#AFA9EC] mt-0.5">
-                    Ver relatórios →
-                  </div>
-                </div>
-              </div>
-            </button>
             );
           })
         )}
@@ -422,6 +497,11 @@ export default function Financeiro() {
           onClose={() => setSelectedUser(null)}
         />
       )}
+
+      <FinanceiroSelectionPopup
+        selectedUsers={selectedUsersForPopup}
+        onClearSelection={() => setSelectedUserKeys([])}
+      />
     </div>
   );
 }

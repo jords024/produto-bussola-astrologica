@@ -243,10 +243,10 @@ def get_financeiro_summary(
 ):
     """Retorna o consolidado financeiro de consumo de IA (Mapas + Leituras do Dia) por usuário."""
     role_filter = (role or "all").strip().lower()
-    if role_filter not in ("all", "client", "admin", "lead"):
+    if role_filter not in ("all", "client", "internal_client", "admin", "lead"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Filtro de papel inválido. Use all, client, admin ou lead.",
+            detail="Filtro de papel inválido. Use all, client, internal_client, admin ou lead.",
         )
 
     sort_by = (sort or "highest_cost").strip().lower()
@@ -261,17 +261,28 @@ def get_financeiro_summary(
     try:
         items, total_maps, total_readings = _aggregate_costs(db, d_start, d_end)
 
+        # Alunos Internos (internal_client) ficam isolados dos relatórios reais por padrão,
+        # aparecendo somente quando o filtro role=internal_client é selecionado.
+        if role_filter == "internal_client":
+            items = [i for i in items if _matches_role(i.get("role"), "internal_client")]
+        else:
+            items = [i for i in items if not _matches_role(i.get("role"), "internal_client")]
+
         # Gasto do mês atual (recalculado conforme papel selecionado)
         today = (datetime.utcnow() - timedelta(hours=3)).date()
         month_items, _, _ = _aggregate_costs(db, today.replace(day=1), today)
-        if role_filter != "all":
-            month_items = [i for i in month_items if _matches_role(i.get("role"), role_filter)]
+        if role_filter == "internal_client":
+            month_items = [i for i in month_items if _matches_role(i.get("role"), "internal_client")]
+        else:
+            month_items = [i for i in month_items if not _matches_role(i.get("role"), "internal_client")]
+            if role_filter != "all":
+                month_items = [i for i in month_items if _matches_role(i.get("role"), role_filter)]
         month_cost_usd = round(sum(i["cost_usd"] for i in month_items), 5)
         month_cost_brl = round(month_cost_usd * USD_TO_BRL, 4)
 
         role_filtered_items = (
             [i for i in items if _matches_role(i.get("role"), role_filter)]
-            if role_filter != "all"
+            if role_filter not in ("all", "internal_client")
             else items
         )
 
@@ -299,6 +310,8 @@ def get_financeiro_summary(
         avg_cost_brl = round(avg_cost_usd * USD_TO_BRL, 4)
 
         has_filter = bool(search and search.strip()) or role_filter != "all"
+        effective_maps = filtered_maps if has_filter else sum(i["maps_count"] for i in role_filtered_items)
+        effective_readings = filtered_readings if has_filter else sum(i["readings_count"] for i in role_filtered_items)
 
         logger.info(
             f"Consulta financeira realizada por '{current_user.email}' | período={period} | papel={role_filter} | sort={sort_by} | usuários={users_count} | total=${total_cost_usd:.4f}"
@@ -320,8 +333,8 @@ def get_financeiro_summary(
                 "avg_cost_per_user_usd": avg_cost_usd,
                 "avg_cost_per_user_brl": avg_cost_brl,
                 "users_count": users_count,
-                "maps_count": filtered_maps if has_filter else total_maps,
-                "readings_count": filtered_readings if has_filter else total_readings,
+                "maps_count": effective_maps,
+                "readings_count": effective_readings,
             },
             "users": filtered_items,
         }

@@ -136,6 +136,11 @@ describe("Financeiro Component", () => {
     await waitFor(() => {
       expect(api.get).toHaveBeenCalledWith("/admin/financeiro?period=all&role=client&sort=newest");
     });
+
+    fireEvent.click(screen.getByTestId("role-btn-internal_client"));
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/admin/financeiro?period=all&role=internal_client&sort=newest");
+    });
   });
 
   it("abre o popup de relatórios ao clicar em um usuário da lista", async () => {
@@ -204,5 +209,61 @@ describe("Financeiro Component", () => {
       expect(screen.getByText("Usuário 12")).toBeDefined();
       expect(screen.queryByText("Usuário 1")).toBeNull();
     });
+  });
+
+  it("permite selecionar pessoas e exibe popup inferior com soma de leituras, tokens, USD e BRL", async () => {
+    render(<Financeiro />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("financeiro-select-user-0")).toBeDefined();
+      expect(screen.getByTestId("financeiro-select-user-1")).toBeDefined();
+    });
+
+    // Inicialmente o popup não é exibido
+    expect(screen.queryByTestId("financeiro-selection-popup")).toBeNull();
+
+    // Seleciona a primeira pessoa (Maria Silva: 10 leituras, 50.000 tokens, $0.3000, R$ 1,68)
+    fireEvent.click(screen.getByTestId("financeiro-select-user-0"));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByTestId("financeiro-selection-popup")).toBeDefined();
+    expect(screen.getByTestId("selection-popup-count").textContent).toContain("1 selecionada");
+    expect(screen.getByTestId("selection-popup-readings").textContent).toBe("10");
+    expect(screen.getByTestId("selection-popup-tokens").textContent).toBe("50.000");
+    expect(screen.getByTestId("selection-popup-usd").textContent).toBe("$0.3000");
+    expect(screen.getByTestId("selection-popup-brl").textContent).toBe("R$ 1,68");
+
+    // Seleciona a segunda pessoa (Admin Teste: 2 leituras, 20.000 tokens, $0.1250, R$ 0,70)
+    fireEvent.click(screen.getByTestId("financeiro-select-user-1"));
+
+    expect(screen.getByTestId("selection-popup-count").textContent).toContain("2 selecionadas");
+    expect(screen.getByTestId("selection-popup-readings").textContent).toBe("12");
+    expect(screen.getByTestId("selection-popup-tokens").textContent).toBe("70.000");
+    expect(screen.getByTestId("selection-popup-usd").textContent).toBe("$0.4250");
+    expect(screen.getByTestId("selection-popup-brl").textContent).toBe("R$ 2,38");
+
+    // Limpa a seleção pelo botão Limpar do popup
+    fireEvent.click(screen.getByTestId("financeiro-clear-selection-btn"));
+    expect(screen.queryByTestId("financeiro-selection-popup")).toBeNull();
+  });
+
+  it("permite selecionar e desmarcar todos os contatos de uma só vez", async () => {
+    render(<Financeiro />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("financeiro-select-all")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId("financeiro-select-all"));
+
+    expect(screen.getByTestId("financeiro-selection-popup")).toBeDefined();
+    expect(screen.getByTestId("selection-popup-count").textContent).toContain("2 selecionadas");
+    expect(screen.getByTestId("selection-popup-readings").textContent).toBe("12");
+    expect(screen.getByTestId("selection-popup-tokens").textContent).toBe("70.000");
+    expect(screen.getByTestId("selection-popup-usd").textContent).toBe("$0.4250");
+    expect(screen.getByTestId("selection-popup-brl").textContent).toBe("R$ 2,38");
+
+    fireEvent.click(screen.getByTestId("financeiro-select-all"));
+    expect(screen.queryByTestId("financeiro-selection-popup")).toBeNull();
   });
 });

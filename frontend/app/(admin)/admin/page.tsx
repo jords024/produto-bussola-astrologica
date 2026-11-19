@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, ApiError, clearToken } from "@/lib/api";
 import { C, type DashboardData, type ClientDetail } from "@/types/admin";
 import PainelAluno, { type AreaAluno } from "@/components/PainelAluno";
 import Tutorial, { tutorialPendente } from "@/components/Tutorial";
@@ -57,7 +57,15 @@ export default function AdminPage() {
           if (res.role === "admin") fetchDashboard();
         }
       })
-      .catch(() => router.push("/admin/login"));
+      .catch((err: unknown) => {
+        // Só força o logout se o token for explicitamente rejeitado (401/403).
+        // Erros transitórios (rede, timeout, reinício do servidor 500/502/503) não deslogam o usuário.
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          clearToken();
+          localStorage.removeItem("bussola_admin_active_tab");
+          router.push("/admin/login");
+        }
+      });
   }, []);
 
   const ADMIN_ONLY_TABS = new Set(["gestao_usuarios", "backup_automatico", "sistema_logs", "pesquisa", "historico", "financeiro"]);

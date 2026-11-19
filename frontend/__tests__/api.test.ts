@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { api } from "@/lib/api";
+import { api, ApiError, saveToken } from "@/lib/api";
 
 describe("api helper", () => {
   beforeEach(() => {
@@ -91,5 +91,39 @@ describe("api helper", () => {
       })
     );
     expect(res).toEqual({ success: true, updated: true });
+  });
+
+  it("lança ApiError com status HTTP quando a requisição falha", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      json: vi.fn().mockResolvedValue({ detail: "Token inválido" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(api.get("/auth/me")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 401,
+      message: "Token inválido",
+    });
+
+    try {
+      await api.get("/auth/me");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiError);
+    }
+  });
+
+  it("saveToken substitui o token anterior e limpa a aba ativa ao logar em outro perfil", () => {
+    localStorage.setItem("bussola_token", "token-antigo");
+    localStorage.setItem("sirius_token", "token-antigo");
+    localStorage.setItem("bussola_admin_active_tab", "financeiro");
+
+    saveToken("token-novo");
+
+    expect(localStorage.getItem("bussola_token")).toBe("token-novo");
+    expect(localStorage.getItem("sirius_token")).toBe("token-novo");
+    expect(localStorage.getItem("bussola_admin_active_tab")).toBeNull();
   });
 });

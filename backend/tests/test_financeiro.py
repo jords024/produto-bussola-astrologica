@@ -383,3 +383,80 @@ def test_financeiro_ignores_salvo_no_painel_logs():
     )
     assert res_rep.status_code == 200
     assert res_rep.json()["maps"] == []
+
+
+def test_financeiro_isola_aluno_interno_dos_gastos_reais():
+    token = get_admin_token()
+    db = SessionLocal()
+    tag = uuid.uuid4().hex[:8]
+    real_email = f"fin_real_{tag}@teste.com"
+    internal_email = f"fin_internal_{tag}@teste.com"
+
+    try:
+        uid_real = str(uuid.uuid4())
+        uid_int = str(uuid.uuid4())
+        db.add(User(
+            id=uid_real,
+            name=f"Aluno Real {tag}",
+            email=real_email,
+            password_hash="x",
+            role="client",
+        ))
+        db.add(User(
+            id=uid_int,
+            name=f"Aluno Interno {tag}",
+            email=internal_email,
+            password_hash="x",
+            role="internal_client",
+        ))
+        db.add(Analise(
+            id=str(uuid.uuid4()),
+            user_id=uid_real,
+            data_alvo=date.today(),
+            sintese="Leitura real",
+            prompt_tokens=100,
+            completion_tokens=200,
+            total_tokens=300,
+            cost_usd=0.10,
+            status="ok",
+        ))
+        db.add(Analise(
+            id=str(uuid.uuid4()),
+            user_id=uid_int,
+            data_alvo=date.today(),
+            sintese="Leitura interna",
+            prompt_tokens=500,
+            completion_tokens=500,
+            total_tokens=1000,
+            cost_usd=0.50,
+            status="ok",
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    # Em role=all e role=client, Aluno Interno NÃO aparece nem suja os totais
+    for role_param in ("all", "client"):
+        res = client.get(
+            f"/admin/financeiro?period=all&role={role_param}&search={tag}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["users"]) == 1
+        assert data["users"][0]["email"] == real_email
+        assert data["summary"]["total_cost_usd"] == pytest.approx(0.10, rel=1e-4)
+        assert data["summary"]["readings_count"] == 1
+
+    # Em role=internal_client, mostra somente o Aluno Interno
+    res_int = client.get(
+        f"/admin/financeiro?period=all&role=internal_client&search={tag}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_int.status_code == 200
+    data_int = res_int.json()
+    assert data_int["role"] == "internal_client"
+    assert len(data_int["users"]) == 1
+    assert data_int["users"][0]["email"] == internal_email
+    assert data_int["summary"]["total_cost_usd"] == pytest.approx(0.50, rel=1e-4)
+    assert data_int["summary"]["readings_count"] == 1

@@ -289,8 +289,8 @@ def create_panel_user(
     validate_strong_password(body.password)
 
     clean_role = (body.role or "client").strip().lower()
-    if clean_role not in ("client", "admin"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Papel inválido. Use 'client' ou 'admin'.")
+    if clean_role not in ("client", "internal_client", "admin"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Papel inválido. Use 'client', 'internal_client' ou 'admin'.")
 
     clean_email = str(body.email).strip().lower()
     if db.query(User).filter(func.lower(User.email) == clean_email).first():
@@ -357,7 +357,10 @@ def update_panel_user(
     if body.whatsapp is not None:
         user.whatsapp = body.whatsapp.strip() or None
     if body.role is not None:
-        user.role = body.role.strip()
+        clean_update_role = body.role.strip().lower()
+        if clean_update_role not in ("client", "internal_client", "admin"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Papel inválido. Use 'client', 'internal_client' ou 'admin'.")
+        user.role = clean_update_role
     if body.is_active is not None:
         user.is_active = body.is_active
 

@@ -1,3 +1,12 @@
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 export function getBaseUrl(): string {
   // Se houver uma variável de ambiente definida, tem prioridade absoluta
   if (process.env.NEXT_PUBLIC_API_URL) {
@@ -56,7 +65,7 @@ async function request<T>(
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || "Erro desconhecido");
+      throw new ApiError(err.detail || "Erro desconhecido", res.status);
     }
     if (res.status === 204 || res.headers.get("content-length") === "0") {
       return undefined as unknown as T;
@@ -107,7 +116,7 @@ export const api = {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-        throw new Error(err.detail || `HTTP ${res.status}`);
+        throw new ApiError(err.detail || `HTTP ${res.status}`, res.status);
       }
       return res.blob();
     } catch (e: unknown) {
@@ -125,6 +134,7 @@ export function saveToken(token: string) {
   if (typeof window !== "undefined") {
     localStorage.setItem("bussola_token", token);
     localStorage.setItem("sirius_token", token);
+    localStorage.removeItem("bussola_admin_active_tab");
   }
 }
 

@@ -40,8 +40,6 @@ services:
       - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL:-aryarajmarketing@gmail.com}
       - SUPER_ADMIN_PASSWORD=${SUPER_ADMIN_PASSWORD:-123456}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - JWT_SECRET=${JWT_SECRET:-bussolaapp_secret_key_development_change_in_production}
-      - JWT_EXPIRE_HOURS=${JWT_EXPIRE_HOURS:-168}
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - RESEND_FROM=${RESEND_FROM:-}
       - DASHBOARD_URL=${DASHBOARD_URL:-http://localhost:3000}

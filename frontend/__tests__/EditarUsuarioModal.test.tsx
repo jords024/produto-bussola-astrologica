@@ -133,4 +133,31 @@ describe("EditarUsuarioModal Component", () => {
     );
     expect(screen.queryByTestId("edit-user-password-input")).toBeNull();
   });
+
+  it("permite alterar o papel do usuário para Aluno Interno (internal_client)", async () => {
+    (api.put as any).mockResolvedValueOnce({ success: true });
+    const onUserUpdatedMock = vi.fn();
+    const onCloseMock = vi.fn();
+
+    render(
+      <EditarUsuarioModal
+        isOpen={true}
+        user={mockRegularUser}
+        onClose={onCloseMock}
+        onUserUpdated={onUserUpdatedMock}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId("edit-role-internal_client-btn"));
+    fireEvent.click(screen.getByTestId("save-edit-user-btn"));
+
+    await waitFor(() => {
+      expect(api.put).toHaveBeenCalledWith(
+        `/admin/users/${mockRegularUser.id}`,
+        expect.objectContaining({
+          role: "internal_client",
+        })
+      );
+    });
+  });
 });
