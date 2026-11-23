@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import Financeiro from "@/components/Financeiro";
+import FinanceiroUserLimitBadge from "@/components/FinanceiroUserLimitBadge";
 import { api } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
@@ -125,21 +126,24 @@ describe("Financeiro Component", () => {
       expect(screen.getByTestId("role-btn-client")).toBeDefined();
     });
 
+    const sortSelect = screen.getByTestId("financeiro-sort-select") as HTMLSelectElement;
+    expect(sortSelect.value).toBe("newest");
+
     fireEvent.click(screen.getByTestId("role-btn-client"));
     await waitFor(() => {
       expect(api.get).toHaveBeenCalledWith("/admin/financeiro?period=all&role=client");
     });
 
-    fireEvent.change(screen.getByTestId("financeiro-sort-select"), {
-      target: { value: "newest" },
+    fireEvent.change(sortSelect, {
+      target: { value: "highest_cost" },
     });
     await waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith("/admin/financeiro?period=all&role=client&sort=newest");
+      expect(api.get).toHaveBeenCalledWith("/admin/financeiro?period=all&role=client&sort=highest_cost");
     });
 
     fireEvent.click(screen.getByTestId("role-btn-internal_client"));
     await waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith("/admin/financeiro?period=all&role=internal_client&sort=newest");
+      expect(api.get).toHaveBeenCalledWith("/admin/financeiro?period=all&role=internal_client&sort=highest_cost");
     });
   });
 
@@ -290,5 +294,55 @@ describe("Financeiro Component", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("financeiro-loading-popup")).toBeNull();
     });
+  });
+
+  it("exibe badges de fase de limite com contagem e modelo de LLM ativo no FinanceiroUserLimitBadge", () => {
+    const { rerender } = render(
+      <FinanceiroUserLimitBadge
+        user={{
+          user_id: "u1",
+          limit_phase: "max_limit",
+          limit_mode: "quota_then_daily",
+          active_ai_model: "gpt-6.1-sol",
+          total_used: 12,
+          max_total_requests: 100,
+          daily_used: 2,
+          daily_request_limit: 8,
+        }}
+      />
+    );
+
+    const badges1 = screen.getByTestId("financeiro-user-limit-badges-u1");
+    expect(badges1.textContent).toContain("Franquia (12/100)");
+    expect(badges1.textContent).toContain("gpt-6.1-sol");
+
+    rerender(
+      <FinanceiroUserLimitBadge
+        user={{
+          user_id: "u1",
+          limit_phase: "daily_limit",
+          limit_mode: "quota_then_daily",
+          active_ai_model: "gpt-6.1-terra",
+          total_used: 100,
+          max_total_requests: 100,
+          daily_used: 3,
+          daily_request_limit: 8,
+        }}
+      />
+    );
+    expect(badges1.textContent).toContain("Limite Diário (3/8 hoje)");
+    expect(badges1.textContent).toContain("gpt-6.1-terra");
+
+    rerender(
+      <FinanceiroUserLimitBadge
+        user={{
+          user_id: "u1",
+          limit_phase: "unlimited",
+          active_ai_model: "gpt-6.1-sol",
+          total_used: 5,
+        }}
+      />
+    );
+    expect(badges1.textContent).toContain("Ilimitado (5 total)");
   });
 });

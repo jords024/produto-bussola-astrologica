@@ -18,6 +18,10 @@ from services.request_limit_service import (
     apply_request_limits_config,
     count_user_ai_requests,
 )
+from services.ai_model_config_service import (
+    normalize_optional_model_id,
+    resolve_reading_model_for_user,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +36,8 @@ class UpdateUserRequestLimitsBody(BaseModel):
     unlimited_daily_requests: Optional[bool] = False
     unlimited_total_requests: Optional[bool] = False
     request_limit_mode: Optional[str] = None
+    ai_model_max_limit: Optional[str] = None
+    ai_model_daily_limit: Optional[str] = None
 
 
 def _resolve_target_user(
@@ -72,6 +78,7 @@ def get_user_request_limits(
     """Consulta os limites e o consumo atual (hoje em BRT e total) de um usuário."""
     target = _resolve_target_user(db, email=email, user_id=user_id)
     usage = count_user_ai_requests(target, db)
+    model_info = resolve_reading_model_for_user(target, db)
     return {
         "user_id": str(target.id),
         "email": target.email,
@@ -82,6 +89,14 @@ def get_user_request_limits(
         "request_limit_mode": getattr(target, "request_limit_mode", None) or "strict",
         "daily_used": usage["daily_used"],
         "total_used": usage["total_used"],
+        "ai_model_max_limit": model_info["user_override_max"],
+        "ai_model_daily_limit": model_info["user_override_daily"],
+        "active_ai_model": model_info["model"],
+        "active_ai_phase": model_info["phase"],
+        "effective_max_model": model_info["effective_max_model"],
+        "effective_daily_model": model_info["effective_daily_model"],
+        "global_max_model": model_info["global_max_model"],
+        "global_daily_model": model_info["global_daily_model"],
     }
 
 
@@ -99,6 +114,7 @@ def update_user_request_limits(
     """
     target = _resolve_target_user(db, email=body.email, user_id=body.user_id)
 
+    provided_fields = set(body.model_fields_set)
     apply_request_limits_config(
         user=target,
         role=target.role,
@@ -106,17 +122,28 @@ def update_user_request_limits(
         max_total_requests=body.max_total_requests,
         unlimited_daily_requests=bool(body.unlimited_daily_requests),
         unlimited_total_requests=bool(body.unlimited_total_requests),
-        provided_fields=set(body.model_fields_set),
+        provided_fields=provided_fields,
         request_limit_mode=body.request_limit_mode,
     )
+
+    if "ai_model_max_limit" in provided_fields:
+        target.ai_model_max_limit = normalize_optional_model_id(
+            body.ai_model_max_limit, "modelo do limite máximo"
+        )
+    if "ai_model_daily_limit" in provided_fields:
+        target.ai_model_daily_limit = normalize_optional_model_id(
+            body.ai_model_daily_limit, "modelo do limite por dia"
+        )
 
     db.commit()
     db.refresh(target)
     usage = count_user_ai_requests(target, db)
+    model_info = resolve_reading_model_for_user(target, db)
 
     logger.info(
         f"Limites de requisições atualizados para '{target.email}' por '{current_user.email}': "
-        f"daily={target.daily_request_limit}, max_total={target.max_total_requests}"
+        f"daily={target.daily_request_limit}, max_total={target.max_total_requests}, "
+        f"ai_max={target.ai_model_max_limit}, ai_daily={target.ai_model_daily_limit}"
     )
 
     return {
@@ -131,4 +158,12 @@ def update_user_request_limits(
         "request_limit_mode": getattr(target, "request_limit_mode", None) or "strict",
         "daily_used": usage["daily_used"],
         "total_used": usage["total_used"],
+        "ai_model_max_limit": model_info["user_override_max"],
+        "ai_model_daily_limit": model_info["user_override_daily"],
+        "active_ai_model": model_info["model"],
+        "active_ai_phase": model_info["phase"],
+        "effective_max_model": model_info["effective_max_model"],
+        "effective_daily_model": model_info["effective_daily_model"],
+        "global_max_model": model_info["global_max_model"],
+        "global_daily_model": model_info["global_daily_model"],
     }

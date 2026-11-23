@@ -133,3 +133,30 @@ Este documento registra todas as alterações estruturais realizadas nas tabelas
   - `users.request_limit_mode` (VARCHAR, Default `'strict'`)
   - `user_invites.request_limit_mode` (VARCHAR, Default `'strict'`)
 - **Script de Migração:** `backend/scripts/add_request_limit_mode_column.py`
+
+
+---
+
+### [2026-11-20] Tabela `ai_model_configs` e Colunas de Modelo de IA em `users`
+- **Tabelas Afetadas:** `ai_model_configs` (Nova tabela) e `users`
+- **Objetivo:** Permitir ao Admin/Super Admin configurar os modelos de IA globais e por aluno para a fase de Limite Máximo/Franquia e para a fase de Limite por Dia.
+- **Colunas Criadas:**
+  - `ai_model_configs.id` (VARCHAR, Primary Key, Default `'default'`)
+  - `ai_model_configs.max_limit_model` (VARCHAR, Not Null, Default `'gpt-5.6-sol'`)
+  - `ai_model_configs.daily_limit_model` (VARCHAR, Not Null, Default `'gpt-4o-mini'`)
+  - `ai_model_configs.updated_by` (VARCHAR, Nullable)
+  - `ai_model_configs.updated_at` (TIMESTAMP, Default CURRENT_TIMESTAMP)
+  - `users.ai_model_max_limit` (VARCHAR, Nullable)
+  - `users.ai_model_daily_limit` (VARCHAR, Nullable)
+- **Script de Migração:** `backend/scripts/add_ai_model_configs.py` (também aplicado automaticamente via `ensure_schema` no startup).
+
+
+---
+
+### [2026-11-20] Adição de Modelos de Fallback em `ai_model_configs`
+- **Tabela Afetada:** `ai_model_configs`
+- **Objetivo:** Permitir configurar um modelo de fallback dedicado para a fase de Limite Máximo/Franquia e outro para a fase de Limite por Dia.
+- **Colunas Criadas:**
+  - `ai_model_configs.max_limit_fallback_model` (VARCHAR, Not Null, Default `'gpt-5.6-luna'`)
+  - `ai_model_configs.daily_limit_fallback_model` (VARCHAR, Not Null, Default `'gpt-4o-mini'`)
+- **Script de Migração:** `backend/scripts/add_ai_model_configs.py` (também aplicado automaticamente via `ensure_schema` no startup).

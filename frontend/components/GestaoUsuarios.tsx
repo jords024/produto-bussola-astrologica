@@ -12,6 +12,7 @@ import PaginationControls from "@/components/PaginationControls";
 import UsersMetricsCards from "@/components/UsersMetricsCards";
 import UsuarioCard from "@/components/UsuarioCard";
 import RedefinirSenhaModal from "@/components/RedefinirSenhaModal";
+import UsersFilterBar, { UserSortOrder } from "@/components/UsersFilterBar";
 
 export interface PanelUser {
   id: string;
@@ -39,6 +40,9 @@ export default function GestaoUsuarios() {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [sortOrder, setSortOrder] = useState<UserSortOrder>("desc");
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserToEdit | null>(null);
@@ -82,7 +86,7 @@ export default function GestaoUsuarios() {
   useEffect(() => {
     setCurrentPage(1);
     setSelectedUserIds([]);
-  }, [search, roleFilter]);
+  }, [search, roleFilter, startDate, endDate, sortOrder]);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -90,6 +94,9 @@ export default function GestaoUsuarios() {
       const params = new URLSearchParams();
       if (search.trim()) params.append("search", search.trim());
       if (roleFilter) params.append("role", roleFilter);
+      if (startDate) params.append("start_date", startDate);
+      if (endDate) params.append("end_date", endDate);
+      if (sortOrder !== "desc") params.append("sort_order", sortOrder);
 
       const url = `/admin/users${params.toString() ? `?${params.toString()}` : ""}`;
       const res = await api.get<{ total: number; items: PanelUser[] }>(url);
@@ -105,7 +112,7 @@ export default function GestaoUsuarios() {
     } finally {
       setLoading(false);
     }
-  }, [search, roleFilter]);
+  }, [search, roleFilter, startDate, endDate, sortOrder]);
 
   useEffect(() => {
     fetchUsers();
@@ -314,43 +321,25 @@ export default function GestaoUsuarios() {
           />
 
       {/* Barra de Filtros */}
-      <div
-        className="p-4 rounded-2xl flex flex-wrap items-center gap-3"
-        style={{ background: "#1a1535", border: "1px solid rgba(127, 119, 221, 0.2)" }}
-      >
-        <div className="relative flex-1 min-w-[220px]">
-          <input
-            data-testid="search-users-input"
-            type="text"
-            placeholder="Buscar por nome ou e-mail..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl px-3 py-2 text-xs outline-none"
-            style={{
-              background: "rgba(255, 255, 255, 0.05)",
-              border: "1px solid rgba(127, 119, 221, 0.3)",
-              color: "#f0eeff",
-            }}
-          />
-        </div>
-
-        <select
-          data-testid="role-filter-select"
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-          className="rounded-xl px-3 py-2 text-xs outline-none cursor-pointer"
-          style={{
-            background: "#1a1535",
-            border: "1px solid rgba(127, 119, 221, 0.3)",
-            color: "#f0eeff",
-          }}
-        >
-          <option value="">Todos os Papéis</option>
-          <option value="admin">Administrador</option>
-          <option value="client">Aluno</option>
-          <option value="internal_client">Aluno Interno</option>
-        </select>
-      </div>
+      <UsersFilterBar
+        search={search}
+        onChangeSearch={setSearch}
+        roleFilter={roleFilter}
+        onChangeRoleFilter={setRoleFilter}
+        startDate={startDate}
+        onChangeStartDate={setStartDate}
+        endDate={endDate}
+        onChangeEndDate={setEndDate}
+        sortOrder={sortOrder}
+        onChangeSortOrder={setSortOrder}
+        onClearFilters={() => {
+          setSearch("");
+          setRoleFilter("");
+          setStartDate("");
+          setEndDate("");
+          setSortOrder("desc");
+        }}
+      />
 
       {/* Barra de Ações em Massa (Usuários) */}
       {!loading && users.length > 0 && (

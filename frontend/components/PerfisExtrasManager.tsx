@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "@/lib/api";
 import { toast } from "@/components/Toast";
 import CityAutocomplete from "@/components/CityAutocomplete";
@@ -447,40 +448,42 @@ export default function PerfisExtrasManager({ onProfilesUpdated }: PerfisExtrasM
         isEditing={Boolean(editingId)}
       />
 
-      {confirmDeleteTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-md rounded-2xl bg-[#1a1535] border border-red-500/30 p-6 space-y-4 shadow-2xl">
-            <h5 className="text-base font-bold text-[#f0eeff]">
-              Remover {confirmDeleteTarget.name}?
-            </h5>
-            <p className="text-xs text-[#b4b0dc]">
-              O mapa astral desta pessoa será removido da sua lista. As leituras já salvas no Diário de Bordo serão preservadas.
-            </p>
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                disabled={deleting}
-                onClick={() => setConfirmDeleteTarget(null)}
-                className="px-4 py-2 rounded-xl text-xs font-medium bg-[#251f49] text-[#d6d3ff] hover:bg-[#31295f] cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={deleting}
-                onClick={handleConfirmDelete}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white cursor-pointer disabled:opacity-50"
-              >
-                {deleting ? "Removendo..." : "Confirmar Exclusão"}
-              </button>
+      {confirmDeleteTarget && typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="w-full max-w-md rounded-2xl bg-[#1a1535] border border-red-500/30 p-6 space-y-4 shadow-2xl">
+              <h5 className="text-base font-bold text-[#f0eeff]">
+                Remover {confirmDeleteTarget.name}?
+              </h5>
+              <p className="text-xs text-[#b4b0dc]">
+                O mapa astral desta pessoa será removido da sua lista. As leituras já salvas no Diário de Bordo serão preservadas.
+              </p>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={() => setConfirmDeleteTarget(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-medium bg-[#251f49] text-[#d6d3ff] hover:bg-[#31295f] cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={handleConfirmDelete}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white cursor-pointer disabled:opacity-50"
+                >
+                  {deleting ? "Removendo..." : "Confirmar Exclusão"}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

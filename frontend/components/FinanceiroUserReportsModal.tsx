@@ -1,10 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { api } from "@/lib/api";
 import { toast } from "@/components/Toast";
 import type { FinanceiroUserItem } from "./Financeiro";
+import FinanceiroUserChartTab from "./FinanceiroUserChartTab";
+import FinanceiroUserReportsDateFilter, {
+  groupCountsByBrasiliaDate,
+  filterItemsByDate,
+} from "./FinanceiroUserReportsDateFilter";
+import FinanceiroUserReadingCard from "./FinanceiroUserReadingCard";
 
 export interface ReadingReportItem {
   id: string;
@@ -12,6 +18,7 @@ export interface ReadingReportItem {
   data_fim?: string | null;
   area?: string | null;
   pergunta?: string | null;
+  model_used?: string | null;
   sintese: string;
   textos?: Record<string, string>;
   posicoes?: Record<string, unknown>;
@@ -69,6 +76,16 @@ const REPORT_SORT_OPTIONS = [
   { id: "lowest_cost", label: "Menor gasto" },
 ];
 
+export function formatShortDateBr(isoDate: string | null | undefined): string {
+  if (!isoDate) return "—";
+  const match = isoDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const [, year, month, day] = match;
+    return `${day}/${month}/${year.slice(-2)}`;
+  }
+  return isoDate;
+}
+
 export function formatBrasiliaDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const date = new Date(iso);
@@ -86,6 +103,13 @@ function getRoleBadge(role: string) {
     return (
       <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
         Admin
+      </span>
+    );
+  }
+  if (normalized === "internal_client") {
+    return (
+      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">
+        Aluno Interno
       </span>
     );
   }
@@ -114,10 +138,40 @@ export default function FinanceiroUserReportsModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState("newest");
-  const [activeTab, setActiveTab] = useState<"readings" | "maps">(
+  const [activeTab, setActiveTab] = useState<"readings" | "maps" | "chart">(
     user.readings_count > 0 || user.maps_count === 0 ? "readings" : "maps"
   );
   const [expandedReadingId, setExpandedReadingId] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [filterStartDate, setFilterStartDate] = useState<string>("");
+  const [filterEndDate, setFilterEndDate] = useState<string>("");
+
+  const clearDateFilter = useCallback(() => {
+    setSelectedDate(null);
+    setFilterStartDate("");
+    setFilterEndDate("");
+  }, []);
+
+  const handleTabChange = (tab: "readings" | "maps" | "chart") => {
+    setActiveTab(tab);
+    clearDateFilter();
+  };
+
+  const handleSelectDate = (dateKey: string | null) => {
+    setSelectedDate(dateKey);
+    setFilterStartDate("");
+    setFilterEndDate("");
+  };
+
+  const handleChangeStartDate = (value: string) => {
+    setSelectedDate(null);
+    setFilterStartDate(value);
+  };
+
+  const handleChangeEndDate = (value: string) => {
+    setSelectedDate(null);
+    setFilterEndDate(value);
+  };
 
   const loadReports = useCallback(async () => {
     setLoading(true);
@@ -151,6 +205,28 @@ export default function FinanceiroUserReportsModal({
 
   const readings = data?.readings || [];
   const maps = data?.maps || [];
+
+  const dateGroups = useMemo(
+    () =>
+      activeTab === "readings"
+        ? groupCountsByBrasiliaDate(readings)
+        : groupCountsByBrasiliaDate(maps),
+    [activeTab, readings, maps]
+  );
+
+  const filteredReadings = useMemo(
+    () => filterItemsByDate(readings, selectedDate, filterStartDate, filterEndDate),
+    [readings, selectedDate, filterStartDate, filterEndDate]
+  );
+
+  const filteredMaps = useMemo(
+    () => filterItemsByDate(maps, selectedDate, filterStartDate, filterEndDate),
+    [maps, selectedDate, filterStartDate, filterEndDate]
+  );
+
+  const activeTotalCount = activeTab === "readings" ? readings.length : maps.length;
+  const activeFilteredCount =
+    activeTab === "readings" ? filteredReadings.length : filteredMaps.length;
 
   const modalContent = (
     <div
@@ -186,7 +262,7 @@ export default function FinanceiroUserReportsModal({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setActiveTab("readings")}
+              onClick={() => handleTabChange("readings")}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
                 activeTab === "readings"
                   ? "bg-[#7f77dd] text-white"
@@ -198,7 +274,7 @@ export default function FinanceiroUserReportsModal({
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab("maps")}
+              onClick={() => handleTabChange("maps")}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
                 activeTab === "maps"
                   ? "bg-[#7f77dd] text-white"
@@ -208,31 +284,63 @@ export default function FinanceiroUserReportsModal({
               <span>🧭</span>
               Mapas Astrais ({maps.length})
             </button>
+            <button
+              type="button"
+              data-testid="financeiro-modal-tab-chart"
+              onClick={() => handleTabChange("chart")}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                activeTab === "chart"
+                  ? "bg-[#7f77dd] text-white"
+                  : "bg-[#251f49] text-[#b4b0dc] hover:bg-[#31295f]"
+              }`}
+            >
+              <span>🪐</span>
+              Mapa do Aluno
+            </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            <label htmlFor="modal-reports-sort" className="text-xs text-[#8b87b8]">
-              Ordenar:
-            </label>
-            <select
-              id="modal-reports-sort"
-              aria-label="Ordenar relatórios"
-              value={sort}
-              onChange={(e) => setSort(e.target.value)}
-              className="px-3 py-1.5 rounded-lg bg-[#14102b] border border-[#7f77dd]/30 text-xs text-[#f0eeff] focus:outline-none focus:border-[#AFA9EC]"
-            >
-              {REPORT_SORT_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {activeTab !== "chart" && (
+            <div className="flex items-center gap-2">
+              <label htmlFor="modal-reports-sort" className="text-xs text-[#8b87b8]">
+                Ordenar:
+              </label>
+              <select
+                id="modal-reports-sort"
+                aria-label="Ordenar relatórios"
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+                className="px-3 py-1.5 rounded-lg bg-[#14102b] border border-[#7f77dd]/30 text-xs text-[#f0eeff] focus:outline-none focus:border-[#AFA9EC]"
+              >
+                {REPORT_SORT_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
+
+        {activeTab !== "chart" && !loading && !error && activeTotalCount > 0 && (
+          <FinanceiroUserReportsDateFilter
+            totalCount={activeTotalCount}
+            filteredCount={activeFilteredCount}
+            dateGroups={dateGroups}
+            selectedDate={selectedDate}
+            startDate={filterStartDate}
+            endDate={filterEndDate}
+            onSelectDate={handleSelectDate}
+            onChangeStartDate={handleChangeStartDate}
+            onChangeEndDate={handleChangeEndDate}
+            onClear={clearDateFilter}
+          />
+        )}
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-3">
-          {loading ? (
+          {activeTab === "chart" ? (
+            <FinanceiroUserChartTab userId={user.user_id} userName={user.name} />
+          ) : loading ? (
             <div className="flex items-center justify-center py-12 gap-2 text-sm text-[#8b87b8]">
               <span className="inline-block w-4 h-4 border-2 border-[#AFA9EC] border-t-transparent rounded-full animate-spin" />
               Carregando relatórios...
@@ -246,127 +354,52 @@ export default function FinanceiroUserReportsModal({
               <div className="text-center py-10 text-sm text-[#8b87b8]">
                 Nenhuma leitura encontrada para este usuário no período selecionado.
               </div>
+            ) : filteredReadings.length === 0 ? (
+              <div className="text-center py-10 space-y-3">
+                <p className="text-sm text-[#8b87b8]">
+                  Nenhuma leitura encontrada para a data selecionada.
+                </p>
+                <button
+                  type="button"
+                  onClick={clearDateFilter}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#251f49] hover:bg-[#31295f] text-[#d6d3ff] border border-[#7f77dd]/30 transition cursor-pointer"
+                >
+                  Limpar filtro de data
+                </button>
+              </div>
             ) : (
-              readings.map((r) => {
-                const isExpanded = expandedReadingId === r.id;
-                const textosEntries = Object.entries(r.textos || {});
-                return (
-                  <div
-                    key={r.id}
-                    className="rounded-xl border border-[#7f77dd]/25 bg-[#14102b]/80 p-4 space-y-3"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-1 min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap text-xs text-[#AFA9EC]">
-                          <span className="inline-flex items-center gap-1">
-                            <span>🕒</span>
-                            {formatBrasiliaDateTime(r.created_at)} (Brasília)
-                          </span>
-                          {r.data_alvo && (
-                            <span className="px-2 py-0.5 rounded bg-[#251f49] text-[#d6d3ff] text-[11px]">
-                              Alvo: {r.data_alvo}
-                              {r.data_fim ? ` até ${r.data_fim}` : ""}
-                            </span>
-                          )}
-                          {r.area && (
-                            <span className="px-2 py-0.5 rounded bg-purple-500/15 text-purple-200 text-[11px]">
-                              {r.area}
-                            </span>
-                          )}
-                        </div>
-                        {r.pergunta && (
-                          <p className="text-xs text-[#b4b0dc] italic truncate">
-                            “{r.pergunta}”
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-4 shrink-0">
-                        <div className="text-right">
-                          <p className="text-sm font-bold text-emerald-400">
-                            ${r.cost_usd.toFixed(4)}
-                          </p>
-                          <p className="text-[11px] text-[#8b87b8]">
-                            ~R$ {r.cost_brl.toFixed(2)} • {r.total_tokens.toLocaleString("pt-BR")} tokens
-                          </p>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setExpandedReadingId(isExpanded ? null : r.id)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#7f77dd]/20 hover:bg-[#7f77dd]/35 text-[#d6d3ff] border border-[#7f77dd]/40 transition cursor-pointer"
-                        >
-                          {isExpanded ? (
-                            <>
-                              <span>▲</span>
-                              Ocultar Relatório
-                            </>
-                          ) : (
-                            <>
-                              <span>📖</span>
-                              Ler Relatório
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="pt-3 border-t border-[#7f77dd]/20 space-y-3 text-sm text-[#e6e3ff]">
-                        {r.pergunta && (
-                          <div className="rounded-lg bg-[#1a1535] p-3 border border-[#7f77dd]/20">
-                            <p className="text-[11px] uppercase tracking-wider text-[#8b87b8] mb-1">
-                              Contexto / Pergunta
-                            </p>
-                            <p className="text-xs text-[#d6d3ff] whitespace-pre-wrap">{r.pergunta}</p>
-                          </div>
-                        )}
-
-                        {r.sintese && (
-                          <div className="rounded-lg bg-[#1a1535] p-3 border border-[#7f77dd]/20">
-                            <p className="text-[11px] uppercase tracking-wider text-[#AFA9EC] font-semibold mb-1">
-                              Síntese da Leitura
-                            </p>
-                            <p className="text-xs leading-relaxed text-[#f0eeff] whitespace-pre-wrap">
-                              {r.sintese}
-                            </p>
-                          </div>
-                        )}
-
-                        {textosEntries.length > 0 && (
-                          <div className="space-y-2">
-                            <p className="text-[11px] uppercase tracking-wider text-[#8b87b8] font-semibold">
-                              Detalhamento por Ponto / Aspecto
-                            </p>
-                            <div className="grid grid-cols-1 gap-2">
-                              {textosEntries.map(([chave, texto]) => (
-                                <div
-                                  key={chave}
-                                  className="rounded-lg bg-[#1a1535]/70 p-3 border border-[#7f77dd]/15"
-                                >
-                                  <p className="text-xs font-semibold text-[#AFA9EC] mb-1">
-                                    {chave}
-                                  </p>
-                                  <p className="text-xs text-[#d6d3ff] whitespace-pre-wrap leading-relaxed">
-                                    {typeof texto === "string" ? texto : JSON.stringify(texto)}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
+              filteredReadings.map((r) => (
+                <FinanceiroUserReadingCard
+                  key={r.id}
+                  reading={r}
+                  isExpanded={expandedReadingId === r.id}
+                  onToggleExpand={() =>
+                    setExpandedReadingId(expandedReadingId === r.id ? null : r.id)
+                  }
+                  formatShortDateBr={formatShortDateBr}
+                  formatBrasiliaDateTime={formatBrasiliaDateTime}
+                />
+              ))
             )
           ) : maps.length === 0 ? (
             <div className="text-center py-10 text-sm text-[#8b87b8]">
               Nenhum mapa astral encontrado para este usuário no período selecionado.
             </div>
+          ) : filteredMaps.length === 0 ? (
+            <div className="text-center py-10 space-y-3">
+              <p className="text-sm text-[#8b87b8]">
+                Nenhum mapa astral encontrado para a data selecionada.
+              </p>
+              <button
+                type="button"
+                onClick={clearDateFilter}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#251f49] hover:bg-[#31295f] text-[#d6d3ff] border border-[#7f77dd]/30 transition cursor-pointer"
+              >
+                Limpar filtro de data
+              </button>
+            </div>
           ) : (
-            maps.map((m) => (
+            filteredMaps.map((m) => (
               <div
                 key={m.id}
                 className="rounded-xl border border-[#7f77dd]/25 bg-[#14102b]/80 p-4 flex flex-wrap items-center justify-between gap-3"

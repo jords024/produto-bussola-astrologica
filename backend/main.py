@@ -8,7 +8,7 @@ load_dotenv(override=False)
 
 from database import engine
 from models.models import Base
-from routes import auth, funnel, members, admin, geocoding, admin_chart, backups, docker_logs, invites, financeiro, profiles, tutorials, request_limits
+from routes import auth, funnel, members, admin, geocoding, admin_chart, backups, docker_logs, invites, financeiro, profiles, tutorials, request_limits, ai_models
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 
@@ -151,6 +151,7 @@ app.include_router(invites.router)
 app.include_router(financeiro.router)
 app.include_router(profiles.router)
 app.include_router(tutorials.router)
+app.include_router(ai_models.router)
 
 
 @app.get("/health")

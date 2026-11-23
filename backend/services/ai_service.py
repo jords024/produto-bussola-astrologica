@@ -20,15 +20,12 @@ client = get_client()
 
 
 def calcular_custo_openai(model_name: str, prompt_tokens: int, completion_tokens: int) -> dict:
-    """Calcula o custo exato em USD e BRL de acordo com o consumo real de tokens."""
-    model_lower = (model_name or "").lower()
-    if "mini" in model_lower:
-        rate_in = 0.15 / 1_000_000
-        rate_out = 0.60 / 1_000_000
-    else:
-        # Modelos topo de linha (gpt-5.6-sol, gpt-5.6-luna, gpt-5.4, gpt-4o)
-        rate_in = 2.50 / 1_000_000
-        rate_out = 10.00 / 1_000_000
+    """Calcula o custo exato em USD e BRL de acordo com o consumo real de tokens e tabela do modelo."""
+    from services.ai_model_config_service import get_model_pricing_per_million
+
+    in_per_m, out_per_m = get_model_pricing_per_million(model_name)
+    rate_in = in_per_m / 1_000_000
+    rate_out = out_per_m / 1_000_000
 
     cost_usd = (prompt_tokens * rate_in) + (completion_tokens * rate_out)
     cost_brl = cost_usd * 5.60
@@ -767,6 +764,8 @@ async def generate_transit_synthesis(
     contexto: dict | None = None,
     movimentos_periodo: list | None = None,
     perfil_usuario: dict | None = None,
+    preferred_model: str | None = None,
+    fallback_model: str | None = None,
 ) -> tuple[str, dict[str, str], dict]:
     """A costura profunda dos cinco blocos, dos cartões personalizados e do período numa leitura completa."""
     if not posicoes or not textos:
@@ -786,7 +785,15 @@ async def generate_transit_synthesis(
     menos_erros = 999
 
     for tentativa in (1, 2):
-        raw_output, custo = await _tentar_sintese(sistema, prompt, nome, data_alvo, tentativa=tentativa)
+        raw_output, custo = await _tentar_sintese(
+            sistema,
+            prompt,
+            nome,
+            data_alvo,
+            tentativa=tentativa,
+            preferred_model=preferred_model,
+            fallback_model=fallback_model,
+        )
         if not raw_output:
             break
 
@@ -828,9 +835,23 @@ async def generate_transit_synthesis(
     return "", {}, {}
 
 
-async def _tentar_sintese(sistema: str, prompt: str, nome: str, data_alvo: str, tentativa: int = 1) -> tuple[str, dict]:
-    """Geração no modelo gpt-5.6-sol com raciocínio no médio (reasoning_effort='medium') e extração de custo."""
-    modelos = [MODELO_TRANSITO_PRINCIPAL, "gpt-5.6-luna", "gpt-5.4", "gpt-4o"]
+async def _tentar_sintese(
+    sistema: str,
+    prompt: str,
+    nome: str,
+    data_alvo: str,
+    tentativa: int = 1,
+    preferred_model: str | None = None,
+    fallback_model: str | None = None,
+) -> tuple[str, dict]:
+    """Geração no modelo configurado com fallback dedicado por fase e fallback seguro."""
+    primary = (preferred_model or "").strip() or MODELO_TRANSITO_PRINCIPAL
+    configured_fb = (fallback_model or "").strip()
+    modelos = [
+        m
+        for m in [primary, configured_fb, MODELO_TRANSITO_PRINCIPAL, "gpt-5.6-luna", "gpt-5.4", "gpt-4o", "gpt-4o-mini"]
+        if m
+    ]
     # Remove duplicatas mantendo a ordem
     modelos_unicos = list(dict.fromkeys(modelos))
 

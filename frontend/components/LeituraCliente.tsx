@@ -204,7 +204,7 @@ export default function LeituraCliente({
         >
           <span className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: C.gold, borderTopColor: "transparent" }} />
           <p className="text-xs font-medium" style={{ color: C.light }}>
-            Gerando leitura profunda no modelo 5.6 Sol — já, já aparece...
+            Gerando leitura profunda — já, já aparece...
           </p>
         </div>
       )}

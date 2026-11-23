@@ -94,4 +94,72 @@ describe("ChartZoomModal Component", () => {
     fireEvent.wheel(viewport, { deltaY: 100 });
     expect(resetBtn.textContent).toBe("115%");
   });
+
+  it("permite mover o mapa com toque (touch) no celular quando zoom > 1", () => {
+    render(<ChartZoomModal {...defaultProps} />);
+
+    // Aumenta zoom para 125%
+    fireEvent.click(screen.getByTestId("zoom-in-btn"));
+    const viewport = screen.getByTestId("zoom-viewport");
+    const wrapper = screen.getByTestId("zoom-content-wrapper");
+
+    fireEvent.touchStart(viewport, {
+      touches: [{ clientX: 100, clientY: 100 }],
+    });
+    fireEvent.touchMove(viewport, {
+      touches: [{ clientX: 150, clientY: 125 }],
+    });
+    fireEvent.touchEnd(viewport, { touches: [] });
+
+    expect(wrapper.style.transform).toContain("translate(40px, 20px)");
+  });
+
+  it("direciona o zoom para a posição do cursor do mouse ao usar o scroll (wheel)", () => {
+    render(<ChartZoomModal {...defaultProps} />);
+
+    const viewport = screen.getByTestId("zoom-viewport");
+    const wrapper = screen.getByTestId("zoom-content-wrapper");
+
+    // Simula viewport 1000x800 (centro em x=500, y=400)
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 1000,
+      height: 800,
+      right: 1000,
+      bottom: 800,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    // Cursor deslocado +200px em X e -100px em Y em relação ao centro
+    fireEvent.wheel(viewport, { deltaY: -100, clientX: 700, clientY: 300 });
+
+    // zoom = 1.15 -> position = (200 - 1.15 * 200, -100 - 1.15 * -100) = (-30, 15)
+    // translate(position.x / zoom, position.y / zoom) = (-30 / 1.15, 15 / 1.15)
+    const match = wrapper.style.transform.match(
+      /^scale\(([\d.]+)\) translate\(([-\d.]+)px, ([-\d.]+)px\)$/
+    );
+    expect(match).not.toBeNull();
+    expect(Number(match![1])).toBeCloseTo(1.15, 5);
+    expect(Number(match![2])).toBeCloseTo(-30 / 1.15, 5);
+    expect(Number(match![3])).toBeCloseTo(15 / 1.15, 5);
+  });
+
+  it("reseta o zoom para 100% sempre que o modal é reaberto", () => {
+    const { rerender } = render(<ChartZoomModal {...defaultProps} isOpen={true} />);
+
+    fireEvent.click(screen.getByTestId("zoom-in-btn"));
+    expect(screen.getByTestId("reset-zoom-btn").textContent).toBe("125%");
+
+    // Fecha e reabre o modal
+    rerender(<ChartZoomModal {...defaultProps} isOpen={false} />);
+    rerender(<ChartZoomModal {...defaultProps} isOpen={true} />);
+
+    expect(screen.getByTestId("reset-zoom-btn").textContent).toBe("100%");
+    expect(screen.getByTestId("zoom-content-wrapper").style.transform).toBe(
+      "scale(1) translate(0px, 0px)"
+    );
+  });
 });

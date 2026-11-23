@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from models.models import Analise, User
 from services.profile_service import resolve_birth_target
 from services.request_limit_service import require_within_request_limits
+from services.ai_model_config_service import resolve_reading_model_for_user
 from services.transit_service import (
     calcular_transitos,
     calcular_movimentos_periodo,
@@ -256,6 +257,15 @@ async def gerar_analise(
         "espera_descobrir": (getattr(user, "form_espera_descobrir", "") or "") if not profile_obj else "",
     }
 
+    model_resolution = resolve_reading_model_for_user(user, db)
+    logger.info(
+        "🤖 Modelo selecionado para '%s': %s (fallback=%s, fase=%s)",
+        getattr(user, "email", target_person.name),
+        model_resolution["model"],
+        model_resolution["fallback_model"],
+        model_resolution["phase"],
+    )
+
     sintese, cartoes, custo_info = await generate_transit_synthesis(
         nome=target_person.name,
         data_alvo=data_alvo.strftime("%d/%m/%Y"),
@@ -264,6 +274,8 @@ async def gerar_analise(
         contexto=contexto,
         movimentos_periodo=movimentos_periodo,
         perfil_usuario=perfil_usuario,
+        preferred_model=model_resolution["model"],
+        fallback_model=model_resolution["fallback_model"],
     )
     if cartoes:
         for pl, custom_txt in cartoes.items():

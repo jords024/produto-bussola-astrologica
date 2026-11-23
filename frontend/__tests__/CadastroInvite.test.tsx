@@ -5,11 +5,13 @@ import ConfirmarCadastroPage from "@/app/(public)/cadastro/confirmar/page";
 import { api } from "@/lib/api";
 
 const mockPush = vi.fn();
+const mockReplace = vi.fn();
 let mockSearchParamToken: string | null = "valid-token-123";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: mockPush,
+    replace: mockReplace,
   }),
   useSearchParams: () => ({
     get: (key: string) => (key === "token" ? mockSearchParamToken : null),
@@ -21,6 +23,7 @@ vi.mock("@/lib/api", () => ({
     get: vi.fn(),
     post: vi.fn(),
   },
+  clearToken: vi.fn(),
 }));
 
 vi.mock("@/components/Toast", () => ({
@@ -34,6 +37,36 @@ describe("Cadastro via Convite Page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSearchParamToken = "valid-token-123";
+    localStorage.clear();
+  });
+
+  it("redireciona direto para /admin quando já existe sessão ativa válida", async () => {
+    localStorage.setItem("bussola_token", "active-jwt-token");
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === "/auth/me") {
+        return Promise.resolve({ email: "aluno@sirius.com", role: "client" });
+      }
+      return Promise.reject(new Error("Não deveria consultar invite"));
+    });
+
+    render(<CadastroPage />);
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/auth/me");
+      expect(mockReplace).toHaveBeenCalledWith("/admin");
+    });
+  });
+
+  it("redireciona direto para /login quando o convite já foi utilizado", async () => {
+    (api.get as any).mockRejectedValue({
+      response: { data: { detail: "Este link de convite já foi utilizado." } },
+    });
+
+    render(<CadastroPage />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/login?convite=usado");
+    });
   });
 
   it("exibe mensagem de erro quando o convite é inválido ou expirou", async () => {

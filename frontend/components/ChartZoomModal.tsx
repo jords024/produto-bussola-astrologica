@@ -16,16 +16,44 @@ export default function ChartZoomModal({
   title,
   svgContent,
 }: ChartZoomModalProps) {
-  const [zoom, setZoom] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [viewState, setViewState] = useState({ zoom: 1, position: { x: 0, y: 0 } });
+  const { zoom, position } = viewState;
+  const setZoom = (updater: number | ((prev: number) => number)) => {
+    setViewState((prev) => ({
+      ...prev,
+      zoom: typeof updater === "function" ? updater(prev.zoom) : updater,
+    }));
+  };
+  const setPosition = (updater: { x: number; y: number } | ((prev: { x: number; y: number }) => { x: number; y: number })) => {
+    setViewState((prev) => ({
+      ...prev,
+      position: typeof updater === "function" ? updater(prev.position) : updater,
+    }));
+  };
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [pinchStartDist, setPinchStartDist] = useState<number | null>(null);
+  const [pinchStartZoom, setPinchStartZoom] = useState(1);
   const [mounted, setMounted] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
+
+  const getTouchDistance = (touches: React.TouchList) => {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  };
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      setViewState({ zoom: 1, position: { x: 0, y: 0 } });
+      setIsDragging(false);
+      setPinchStartDist(null);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     const el = viewportRef.current;
@@ -54,8 +82,7 @@ export default function ChartZoomModal({
   };
 
   const handleResetZoom = () => {
-    setZoom(1);
-    setPosition({ x: 0, y: 0 });
+    setViewState({ zoom: 1, position: { x: 0, y: 0 } });
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -76,18 +103,71 @@ export default function ChartZoomModal({
     setIsDragging(false);
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      setIsDragging(false);
+      setPinchStartDist(getTouchDistance(e.touches));
+      setPinchStartZoom(zoom);
+      return;
+    }
+    if (e.touches.length === 1 && zoom > 1) {
+      setIsDragging(true);
+      setDragStart({
+        x: e.touches[0].clientX - position.x,
+        y: e.touches[0].clientY - position.y,
+      });
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchStartDist !== null) {
+      const dist = getTouchDistance(e.touches);
+      const nextZoom = Math.min(4, Math.max(0.5, Number(((dist / pinchStartDist) * pinchStartZoom).toFixed(2))));
+      setZoom(nextZoom);
+      return;
+    }
+    if (e.touches.length === 1 && isDragging) {
+      setPosition({
+        x: e.touches[0].clientX - dragStart.x,
+        y: e.touches[0].clientY - dragStart.y,
+      });
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) {
+      setPinchStartDist(null);
+    }
+    if (e.touches.length === 0) {
+      setIsDragging(false);
+    }
+  };
+
   const handleWheel = (e: React.WheelEvent) => {
     // Previne comportamento padrão apenas quando o evento for cancelável (evita erro de passive listener)
     if (e.cancelable) {
       e.preventDefault();
     }
-    if (e.deltaY < 0) {
-      // Rolou para cima -> Zoom In
-      setZoom((prev) => Math.min(Number((prev + 0.15).toFixed(2)), 4));
-    } else if (e.deltaY > 0) {
-      // Rolou para baixo -> Zoom Out
-      setZoom((prev) => Math.max(Number((prev - 0.15).toFixed(2)), 0.5));
-    }
+    const delta = e.deltaY < 0 ? 0.15 : e.deltaY > 0 ? -0.15 : 0;
+    if (delta === 0) return;
+
+    const rect = viewportRef.current?.getBoundingClientRect();
+    const hasSize = Boolean(rect && rect.width > 0 && rect.height > 0);
+    const mx = hasSize && rect ? e.clientX - (rect.left + rect.width / 2) : 0;
+    const my = hasSize && rect ? e.clientY - (rect.top + rect.height / 2) : 0;
+
+    setViewState((prev) => {
+      const nextZoom = Math.min(4, Math.max(0.5, Number((prev.zoom + delta).toFixed(2))));
+      if (nextZoom === prev.zoom) return prev;
+      const scaleRatio = nextZoom / prev.zoom;
+      return {
+        zoom: nextZoom,
+        position: {
+          x: mx - scaleRatio * (mx - prev.position.x),
+          y: my - scaleRatio * (my - prev.position.y),
+        },
+      };
+    });
   };
 
   const modalContent = (
@@ -187,14 +267,20 @@ export default function ChartZoomModal({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
-          className={`flex-1 overflow-hidden relative flex items-center justify-center p-4 select-none ${
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
+          className={`flex-1 overflow-hidden relative flex items-center justify-center p-4 select-none touch-none ${
             zoom > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-default"
           }`}
-          style={{ background: "#05030c" }}
+          style={{ background: "#05030c", touchAction: "none" }}
         >
           <div
             data-testid="zoom-content-wrapper"
-            className="transition-transform duration-150 ease-out w-full h-full flex items-center justify-center [&>svg]:w-auto [&>svg]:h-auto [&>svg]:max-w-full [&>svg]:max-h-[85vh] [&>svg]:drop-shadow-[0_0_35px_rgba(127,119,221,0.25)]"
+            className={`${
+              isDragging ? "transition-none" : "transition-transform duration-150 ease-out"
+            } w-full h-full flex items-center justify-center [&>svg]:w-auto [&>svg]:h-auto [&>svg]:max-w-full [&>svg]:max-h-[85vh] [&>svg]:drop-shadow-[0_0_35px_rgba(127,119,221,0.25)]`}
             style={{
               transform: `scale(${zoom}) translate(${position.x / zoom}px, ${position.y / zoom}px)`,
               transformOrigin: "center center",
@@ -205,14 +291,19 @@ export default function ChartZoomModal({
           {/* Dica flutuante de arrasto e scroll */}
           {zoom > 1 && (
             <div
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3.5 py-1.5 rounded-full text-[11px] pointer-events-none backdrop-blur-md shadow-lg"
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3.5 py-1.5 rounded-full text-[11px] pointer-events-none backdrop-blur-md shadow-lg text-center max-w-[90vw]"
               style={{
                 background: "rgba(10, 7, 24, 0.8)",
                 color: "#AFA9EC",
                 border: "1px solid rgba(127, 119, 221, 0.35)",
               }}
             >
-              🖱️ Use o scroll do mouse para Zoom In/Out · Clique e arraste para navegar
+              <span className="hidden sm:inline">
+                🖱️ Use o scroll do mouse para Zoom In/Out · Clique e arraste para navegar
+              </span>
+              <span className="sm:hidden">
+                👆 Arraste com o dedo para mover · Use pinça ou 🔍 para zoom
+              </span>
             </div>
           )}
         </div>

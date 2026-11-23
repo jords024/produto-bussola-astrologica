@@ -142,7 +142,7 @@ export const ETAPAS_LOADING = [
   "Localizando as coordenadas exatas do seu mapa de nascimento...",
   "Calculando o movimento dos astros para o período que você escolheu...",
   "Cruzando os encontros do céu com os pontos que existem só no seu mapa...",
-  "Aprofundando a leitura personalizada no modelo 5.6 Sol para o seu momento...",
+  "Aprofundando a leitura personalizada para o seu momento...",
   "Costurando sua previsão completa e o passo prático, já, já aparece na tela...",
 ];
 

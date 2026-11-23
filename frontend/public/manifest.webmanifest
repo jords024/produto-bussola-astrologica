@@ -1,0 +1,26 @@
+{
+  "name": "Bússola Astrológica",
+  "short_name": "Bússola",
+  "description": "Leitura astrológica profunda e personalizada com Crassus Gobbi.",
+  "start_url": "/admin",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f0b1e",
+  "theme_color": "#0f0b1e",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

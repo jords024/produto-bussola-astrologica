@@ -9,13 +9,14 @@ import Tutorial, { tutorialPendente } from "@/components/Tutorial";
 import AdminSidebar from "@/components/AdminSidebar";
 import PesquisaClientes from "@/components/PesquisaClientes";
 import ClientDrawer from "@/components/ClientDrawer";
-import LeadQuestionnaire from "@/components/LeadQuestionnaire";
-import HistoricoPesquisas from "@/components/HistoricoPesquisas";
 import GestaoUsuarios from "@/components/GestaoUsuarios";
 import Financeiro from "@/components/Financeiro";
 import ComeceAqui from "@/components/ComeceAqui";
 import BackupAutomatico from "@/components/backup/BackupAutomatico";
 import GerenciamentoLogs from "@/components/GerenciamentoLogs";
+import ConfiguracoesIA from "@/components/ConfiguracoesIA";
+import PwaInstallBanner from "@/components/PwaInstallBanner";
+import { usePwaInstall } from "@/lib/usePwaInstall";
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState("home");
@@ -28,6 +29,15 @@ export default function AdminPage() {
   const [tutorialAberto, setTutorialAberto] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const router = useRouter();
+  const {
+    canShowInstall,
+    canShowBanner,
+    isIos,
+    showGuideModal,
+    triggerInstall,
+    dismissBanner,
+    closeGuideModal,
+  } = usePwaInstall();
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -54,7 +64,10 @@ export default function AdminPage() {
           // O painel de gestao so e montado para quem e admin de verdade.
           // Antes disto bastava ter token: um cliente logado via a tela toda
           // e so tomava o erro depois, vindo do backend.
-          if (res.role === "admin") fetchDashboard();
+          if (res.role === "admin") {
+            fetchDashboard();
+            setActiveTab((prev) => (prev === "home" || prev === "historico" ? "financeiro" : prev));
+          }
         }
       })
       .catch((err: unknown) => {
@@ -103,6 +116,8 @@ export default function AdminPage() {
           const resolved = resolveTabName(initialTab, papel);
           if (papel && papel !== "admin" && ADMIN_ONLY_TABS.has(resolved)) {
             setActiveTab("home");
+          } else if (papel === "admin" && (resolved === "home" || resolved === "historico")) {
+            setActiveTab("financeiro");
           } else {
             setActiveTab(resolved);
           }
@@ -166,6 +181,8 @@ export default function AdminPage() {
         papel={papel || "client"}
         mobileOpen={mobileMenuOpen}
         onCloseMobile={() => setMobileMenuOpen(false)}
+        canInstallPwa={canShowInstall}
+        onInstallPwa={triggerInstall}
       />
 
       <Tutorial
@@ -197,7 +214,7 @@ export default function AdminPage() {
             </button>
             <h1 className="text-base sm:text-xl font-bold truncate" style={{ color: C.light }}>
               {activeTab === "home"
-                ? papel !== "admin" ? "Minha Bússola" : "Cadastrar Mapa"
+                ? "Minha Bússola"
                 : activeTab === "pesquisa" || activeTab === "leitura"
                 ? papel !== "admin" ? "A leitura do dia" : "Pesquisa de Clientes"
                 : activeTab === "historico" || activeTab === "diario"
@@ -214,6 +231,8 @@ export default function AdminPage() {
                 ? "Financeiro"
                 : activeTab === "comece_aqui"
                 ? "Comece Aqui"
+                : activeTab === "configuracoes_ia"
+                ? "Modelos de IA"
                 : "Gestão de Usuários"}
             </h1>
           </div>
@@ -233,6 +252,17 @@ export default function AdminPage() {
               era justamente a tela de gestao aparecendo durante esse vao. */}
           {papel === null && (
             <p className="text-sm" style={{ color: C.muted }}>Carregando...</p>
+          )}
+
+          {papel !== null && (
+            <PwaInstallBanner
+              visible={canShowBanner}
+              isIos={isIos}
+              showGuideModal={showGuideModal}
+              onInstall={triggerInstall}
+              onDismiss={dismissBanner}
+              onCloseGuide={closeGuideModal}
+            />
           )}
 
           {/* Aba Comece Aqui (Compartilhada: Alunos visualizam, Admins gerenciam) */}
@@ -273,30 +303,15 @@ export default function AdminPage() {
 
           {/* Ferramentas Exclusivas de Gestão para Administradores */}
           {papel === "admin" && !["comece_aqui", "leitura", "bussola", "diario", "dados"].includes(activeTab) && (<>
-          {/* Aba Home / Cadastrar Mapa */}
-          {activeTab === "home" && (
-            <div className="w-full">
-              <LeadQuestionnaire
-                papel={papel || "client"}
-                onClientCreated={() => {
-                  fetchDashboard();
-                }}
-                onNavigateToSearch={() => setActiveTab("pesquisa")}
-              />
-            </div>
-          )}
+          {/* Aba Configurações de Modelos de IA */}
+          {activeTab === "configuracoes_ia" && <ConfiguracoesIA />}
 
           {/* Aba Pesquisa de Clientes */}
           {activeTab === "pesquisa" && (
             <PesquisaClientes
               onOpenClient={openClient}
-              onGoToHome={() => setActiveTab("home")}
+              onGoToHome={() => setActiveTab("dados")}
             />
-          )}
-
-          {/* Aba Histórico de Pesquisas */}
-          {activeTab === "historico" && (
-            <HistoricoPesquisas onOpenClient={openClient} />
           )}
 
           {/* Aba Financeiro */}

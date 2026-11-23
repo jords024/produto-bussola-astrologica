@@ -420,6 +420,47 @@ describe("GestaoUsuarios Component", () => {
     expect(screen.getByTestId("metric-real-clients").textContent).toBe("2");
     expect(screen.getByTestId("metric-internal-clients").textContent).toBe("1");
   });
+
+  it("permite filtrar usuários por data de criação e alterar a ordenação no dropdown", async () => {
+    render(<GestaoUsuarios />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Admin Master")).toBeDefined();
+    });
+
+    const startDateInput = screen.getByTestId("start-date-filter-input");
+    const endDateInput = screen.getByTestId("end-date-filter-input");
+    const sortSelect = screen.getByTestId("sort-order-select") as HTMLSelectElement;
+
+    expect(sortSelect.value).toBe("desc");
+
+    fireEvent.change(startDateInput, { target: { value: "2026-03-01" } });
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/admin/users?start_date=2026-03-01");
+    });
+
+    fireEvent.change(endDateInput, { target: { value: "2026-03-31" } });
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/admin/users?start_date=2026-03-01&end_date=2026-03-31");
+    });
+
+    fireEvent.change(sortSelect, { target: { value: "asc" } });
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith(
+        "/admin/users?start_date=2026-03-01&end_date=2026-03-31&sort_order=asc"
+      );
+    });
+
+    const clearBtn = screen.getByTestId("clear-users-filters-btn");
+    fireEvent.click(clearBtn);
+
+    await waitFor(() => {
+      expect(sortSelect.value).toBe("desc");
+      expect((startDateInput as HTMLInputElement).value).toBe("");
+      expect((endDateInput as HTMLInputElement).value).toBe("");
+      expect(api.get).toHaveBeenLastCalledWith("/admin/users");
+    });
+  });
 });
 
 

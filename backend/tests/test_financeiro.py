@@ -221,6 +221,15 @@ def test_financeiro_role_filter_recalculates_summary_and_sorting():
     assert d_client["summary"]["total_cost_usd"] == pytest.approx(0.05, rel=1e-4)
     assert d_client["summary"]["readings_count"] == 1
 
+    # Ordenação padrão deve ser newest (mais recente primeiro)
+    res_default = client.get(
+        f"/admin/financeiro?period=all&search={tag}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_default.status_code == 200
+    assert res_default.json()["sort"] == "newest"
+    assert res_default.json()["users"][0]["email"] == admin_email
+
     # Ordena por lowest_cost e newest
     res_lowest = client.get(
         f"/admin/financeiro?period=all&search={tag}&sort=lowest_cost",
@@ -527,3 +536,106 @@ def test_financeiro_queries_nao_carregam_svg_content():
     for sql in analises_selects:
         assert "svg_content" not in sql
         assert "posicoes" not in sql
+
+
+def test_financeiro_date_filter_respects_brasilia_timezone():
+    token = get_admin_token()
+    tag = uuid.uuid4().hex[:6]
+    email = f"testfin_tz_{tag}@exemplo.com"
+
+    db = SessionLocal()
+    try:
+        u = User(
+            id=str(uuid.uuid4()),
+            name=f"Usuario TZ {tag}",
+            email=email,
+            password_hash=hash_password("SenhaForte@123"),
+            role="client",
+            is_active=True,
+        )
+        db.add(u)
+        db.commit()
+        uid = str(u.id)
+
+        # 22/11/2026 22:43 Brasília == 23/11/2026 01:43 UTC (NÃO deve aparecer ao filtrar 23/11)
+        db.add(Analise(
+            id=str(uuid.uuid4()),
+            user_id=uid,
+            data_alvo=date(2026, 11, 22),
+            sintese="Ontem noite Brasília",
+            prompt_tokens=100,
+            completion_tokens=100,
+            total_tokens=200,
+            cost_usd=0.01,
+            status="concluido",
+            created_at=datetime(2026, 11, 23, 1, 43, 0),
+        ))
+
+        # 23/11/2026 00:05 Brasília == 23/11/2026 03:05 UTC (DEVE aparecer ao filtrar 23/11)
+        db.add(Analise(
+            id=str(uuid.uuid4()),
+            user_id=uid,
+            data_alvo=date(2026, 11, 23),
+            sintese="Hoje madrugada Brasília",
+            prompt_tokens=100,
+            completion_tokens=100,
+            total_tokens=200,
+            cost_usd=0.02,
+            status="concluido",
+            created_at=datetime(2026, 11, 23, 3, 5, 0),
+        ))
+
+        # 23/11/2026 22:30 Brasília == 24/11/2026 01:30 UTC (DEVE aparecer ao filtrar 23/11)
+        db.add(Analise(
+            id=str(uuid.uuid4()),
+            user_id=uid,
+            data_alvo=date(2026, 11, 23),
+            sintese="Hoje noite Brasília",
+            prompt_tokens=100,
+            completion_tokens=100,
+            total_tokens=200,
+            cost_usd=0.03,
+            status="concluido",
+            created_at=datetime(2026, 11, 24, 1, 30, 0),
+        ))
+
+        # Mapa em 22/11/2026 21:50 Brasília == 23/11/2026 00:50 UTC (NÃO deve aparecer em 23/11)
+        db.add(GenerationLog(
+            id=str(uuid.uuid4()),
+            name=f"Usuario TZ {tag}",
+            email=email,
+            birth_date=date(1990, 1, 1),
+            birth_time="10:00",
+            birth_city="São Paulo",
+            status="success",
+            prompt_tokens=500,
+            completion_tokens=500,
+            total_tokens=1000,
+            cost_usd=0.05,
+            created_at=datetime(2026, 11, 23, 0, 50, 0),
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    res_sum = client.get(
+        f"/admin/financeiro?period=custom&start_date=2026-11-23&end_date=2026-11-23&search={tag}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_sum.status_code == 200
+    data_sum = res_sum.json()
+    assert len(data_sum["users"]) == 1
+    assert data_sum["users"][0]["readings_count"] == 2
+    assert data_sum["users"][0]["maps_count"] == 0
+    assert data_sum["users"][0]["cost_usd"] == pytest.approx(0.05, rel=1e-4)
+
+    res_rep = client.get(
+        f"/admin/financeiro/user-reports?user_id={uid}&period=custom&start_date=2026-11-23&end_date=2026-11-23",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_rep.status_code == 200
+    data_rep = res_rep.json()
+    sinteses = {r["sintese"] for r in data_rep["readings"]}
+    assert sinteses == {"Hoje madrugada Brasília", "Hoje noite Brasília"}
+    assert len(data_rep["maps"]) == 0
+

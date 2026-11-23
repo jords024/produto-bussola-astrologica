@@ -258,6 +258,9 @@ class BatchDeleteUsersRequest(BaseModel):
 def list_panel_users(
     search: Optional[str] = Query(None),
     role: Optional[str] = Query(None),
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -273,8 +276,13 @@ def list_panel_users(
         q = q.filter(
             (User.name.ilike(like)) | (User.email.ilike(like)) | (User.whatsapp.ilike(like))
         )
+    if start_date:
+        q = q.filter(cast(User.created_at, Date) >= start_date)
+    if end_date:
+        q = q.filter(cast(User.created_at, Date) <= end_date)
 
-    users = q.order_by(User.created_at.desc()).all()
+    order_col = User.created_at.asc() if sort_order == "asc" else User.created_at.desc()
+    users = q.order_by(order_col).all()
     items = []
     for u in users:
         is_super = (u.email.strip().lower() == super_admin_email) if u.email else False

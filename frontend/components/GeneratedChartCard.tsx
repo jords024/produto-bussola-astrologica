@@ -419,7 +419,7 @@ export default function GeneratedChartCard({
         {/* A leitura do dia. A lista acima é o mapa de nascimento, que é
             referência fixa; é AQUI que sai o direcionamento, porque é aqui
             que o céu de uma data encontra o mapa dessa pessoa. */}
-        <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+        <div data-testid="generated-chart-leitura-section" className="col-span-full w-full">
           <LeituraCliente clienteId={data.id} nome={data.name} />
         </div>
       </div>

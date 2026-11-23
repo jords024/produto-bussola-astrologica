@@ -43,9 +43,9 @@ describe("AdminSidebar Component", () => {
       expect(screen.getAllByText("Painel de Gestão").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Segurança").length).toBeGreaterThan(0);
 
-      expect(screen.getAllByRole("button", { name: /cadastrar mapa/i }).length).toBeGreaterThan(0);
+      expect(screen.queryByRole("button", { name: /cadastrar mapa/i })).toBeNull();
       expect(screen.getAllByRole("button", { name: /pesquisa de clientes/i }).length).toBeGreaterThan(0);
-      expect(screen.getAllByRole("button", { name: /histórico de gerações/i }).length).toBeGreaterThan(0);
+      expect(screen.queryByRole("button", { name: /histórico de gerações/i })).toBeNull();
       expect(screen.getAllByRole("button", { name: /financeiro/i }).length).toBeGreaterThan(0);
       expect(screen.getAllByRole("button", { name: /backup automático/i }).length).toBeGreaterThan(0);
       expect(screen.getAllByRole("button", { name: /sistema de logs/i }).length).toBeGreaterThan(0);

@@ -163,4 +163,18 @@ describe("GeneratedChartCard", () => {
     expect(screen.getByTestId("chart-real-creation-badge").textContent).toContain("Gerado em");
     expect(screen.getByText(/Data de Geração do Mapa:/i)).toBeDefined();
   });
+
+  it("renderiza a seção de leitura de trânsitos ocupando toda a largura do grid", async () => {
+    (api.get as any).mockResolvedValueOnce(mockClientDetail);
+
+    render(<GeneratedChartCard clientId="cli-123" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generated-chart-leitura-section")).toBeDefined();
+    });
+
+    const section = screen.getByTestId("generated-chart-leitura-section");
+    expect(section.className).toContain("col-span-full");
+    expect(section.className).toContain("w-full");
+  });
 });

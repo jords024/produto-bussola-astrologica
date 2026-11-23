@@ -46,6 +46,8 @@ class User(Base):
     daily_request_limit = Column(Integer, nullable=True)
     max_total_requests = Column(Integer, nullable=True)
     request_limit_mode = Column(String, default="strict")  # strict | quota_then_daily
+    ai_model_max_limit = Column(String, nullable=True)     # sobrescrita por aluno na fase de limite máximo/franquia
+    ai_model_daily_limit = Column(String, nullable=True)   # sobrescrita por aluno na fase de limite diário
     email_status = Column(String, default="not_sent")   # not_sent | sent | failed
     email_sent_at = Column(DateTime, nullable=True)
 
@@ -226,4 +228,17 @@ class TutorialLesson(Base):
     sort_order = Column(Integer, default=0)
     created_by_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AiModelConfig(Base):
+    """Configuração global dos modelos de IA usados no Limite Máximo e no Limite por Dia."""
+    __tablename__ = "ai_model_configs"
+
+    id = Column(String, primary_key=True, default="default")
+    max_limit_model = Column(String, nullable=False, default="gpt-5.6-sol")
+    max_limit_fallback_model = Column(String, nullable=False, default="gpt-5.6-luna")
+    daily_limit_model = Column(String, nullable=False, default="gpt-4o-mini")
+    daily_limit_fallback_model = Column(String, nullable=False, default="gpt-4o-mini")
+    updated_by = Column(String, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

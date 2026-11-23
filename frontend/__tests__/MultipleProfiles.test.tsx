@@ -162,9 +162,12 @@ describe("Múltiplos Perfis (Admin & Aluno)", () => {
       expect(screen.queryByTestId("generating-chart-modal")).toBeNull();
     });
 
-    // Abre popup de exclusão
+    // Abre popup de exclusão (deve renderizar via Portal no document.body para cobrir toda a tela)
     fireEvent.click(screen.getByText("Excluir"));
-    expect(screen.getByRole("dialog")).toBeDefined();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeDefined();
+    expect(dialog.parentElement).toBe(document.body);
+    expect(dialog.className).toContain("fixed inset-0");
     expect(screen.getByText("Remover João Pedro?")).toBeDefined();
 
     fireEvent.click(screen.getByText("Confirmar Exclusão"));

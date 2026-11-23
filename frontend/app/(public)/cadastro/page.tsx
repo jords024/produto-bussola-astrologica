@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, clearToken } from "@/lib/api";
 import { toast } from "@/components/Toast";
 import { CountryPhoneInput } from "@/components/CountryPhoneInput";
 import { PasswordInput } from "@/components/PasswordInput";
@@ -47,26 +47,66 @@ function CadastroContent() {
     hasMinLength && hasUpperCase && hasLowerCase && hasNumber && hasSpecialChar;
 
   useEffect(() => {
-    if (!token) {
-      setErrorMsg("Nenhum token de convite foi fornecido no link.");
-      setLoading(false);
-      return;
-    }
+    let cancelled = false;
 
-    const checkInvite = async () => {
+    const init = async () => {
+      // 1. Se já existir sessão ativa no navegador, entra direto no app
+      const existingToken =
+        typeof window !== "undefined"
+          ? localStorage.getItem("bussola_token") || localStorage.getItem("sirius_token")
+          : null;
+
+      if (existingToken) {
+        try {
+          await api.get("/auth/me");
+          if (!cancelled) {
+            toast.success("Você já está conectado! Entrando no app...");
+            router.replace("/admin");
+          }
+          return;
+        } catch {
+          clearToken();
+        }
+      }
+
+      if (!token) {
+        if (!cancelled) {
+          setErrorMsg("Nenhum token de convite foi fornecido no link.");
+          setLoading(false);
+        }
+        return;
+      }
+
+      // 2. Valida o convite; se já foi utilizado, redireciona direto para o login
       try {
         const data = await api.get<InviteInfo>(`/auth/invite/${encodeURIComponent(token)}`);
-        setInviteInfo(data);
+        if (!cancelled) {
+          setInviteInfo(data);
+          setLoading(false);
+        }
       } catch (err: any) {
-        const msg = err.response?.data?.detail || "Link de convite inválido ou expirado.";
-        setErrorMsg(msg);
-      } finally {
-        setLoading(false);
+        const msg =
+          err?.response?.data?.detail || err?.message || "Link de convite inválido ou expirado.";
+        if (msg.toLowerCase().includes("já foi utilizado")) {
+          if (!cancelled) {
+            toast.success("Este convite já foi utilizado! Redirecionando para o login...");
+            router.replace("/login?convite=usado");
+          }
+          return;
+        }
+        if (!cancelled) {
+          setErrorMsg(msg);
+          setLoading(false);
+        }
       }
     };
 
-    checkInvite();
-  }, [token]);
+    init();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, router]);
 
   // Etapa 1: Solicitar código de verificação via Brevo
   const handleRequestCode = async (e: React.FormEvent) => {
@@ -104,7 +144,17 @@ function CadastroContent() {
       toast.success("Código de verificação enviado para o seu e-mail!");
       setStep("verify");
     } catch (err: any) {
-      const msg = err.response?.data?.detail || "Erro ao processar solicitação de cadastro.";
+      const msg =
+        err?.response?.data?.detail || err?.message || "Erro ao processar solicitação de cadastro.";
+      if (
+        msg.toLowerCase().includes("já está cadastrado") ||
+        msg.toLowerCase().includes("já cadastrado") ||
+        msg.toLowerCase().includes("já existe")
+      ) {
+        toast.success("Você já possui cadastro! Redirecionando para o login...");
+        router.replace(`/login?convite=usado&email=${encodeURIComponent(email.trim().toLowerCase())}`);
+        return;
+      }
       toast.error(msg);
     } finally {
       setSubmitting(false);

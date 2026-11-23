@@ -6,6 +6,7 @@ import { toast } from "@/components/Toast";
 import FinanceiroUserReportsModal from "./FinanceiroUserReportsModal";
 import FinanceiroSelectionPopup from "./FinanceiroSelectionPopup";
 import FinanceiroLoadingPopup from "./FinanceiroLoadingPopup";
+import FinanceiroUserLimitBadge from "./FinanceiroUserLimitBadge";
 import PaginationControls from "@/components/PaginationControls";
 
 export interface FinanceiroUserItem {
@@ -21,6 +22,13 @@ export interface FinanceiroUserItem {
   cost_usd: number;
   cost_brl: number;
   last_activity_at?: string | null;
+  limit_phase?: "max_limit" | "daily_limit" | "unlimited";
+  limit_mode?: string;
+  active_ai_model?: string;
+  total_used?: number;
+  max_total_requests?: number | null;
+  daily_used?: number;
+  daily_request_limit?: number | null;
 }
 
 export interface FinanceiroResponse {
@@ -61,9 +69,9 @@ const ROLE_OPTIONS = [
 ];
 
 const SORT_OPTIONS = [
+  { id: "newest", label: "Mais recente" },
   { id: "highest_cost", label: "Maior gasto" },
   { id: "lowest_cost", label: "Menor gasto" },
-  { id: "newest", label: "Mais recente" },
   { id: "oldest", label: "Mais antiga" },
 ];
 
@@ -73,7 +81,7 @@ export default function Financeiro() {
   const [endDate, setEndDate] = useState("");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("highest_cost");
+  const [sortBy, setSortBy] = useState("newest");
   const [selectedUser, setSelectedUser] = useState<FinanceiroUserItem | null>(null);
   const [selectedUserKeys, setSelectedUserKeys] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -92,7 +100,7 @@ export default function Financeiro() {
       }
       if (search.trim()) params.set("search", search.trim());
       if (roleFilter !== "all") params.set("role", roleFilter);
-      if (sortBy !== "highest_cost") params.set("sort", sortBy);
+      if (sortBy !== "newest") params.set("sort", sortBy);
 
       const res = await api.get<FinanceiroResponse>(`/admin/financeiro?${params.toString()}`);
       setData(res);
@@ -404,7 +412,7 @@ export default function Financeiro() {
             return (
               <div
                 key={`${selectionKey}-${globalPos}`}
-                className="w-full p-4 rounded-2xl flex items-center gap-3 transition-all hover:border-[#7F77DD]/60 hover:bg-[#211b44]"
+                className="w-full p-4 rounded-2xl flex items-start md:items-center gap-3 transition-all hover:border-[#7F77DD]/60 hover:bg-[#211b44]"
                 style={{
                   background: isSelected ? "rgba(127, 119, 221, 0.14)" : "#1a1535",
                   border: isSelected
@@ -418,13 +426,13 @@ export default function Financeiro() {
                   onChange={() => toggleUserSelection(selectionKey)}
                   aria-label={`Selecionar ${u.name}`}
                   data-testid={`financeiro-select-user-${idx}`}
-                  className="w-4 h-4 rounded accent-[#7F77DD] cursor-pointer shrink-0"
+                  className="w-4 h-4 mt-2 md:mt-0 rounded accent-[#7F77DD] cursor-pointer shrink-0"
                 />
                 <button
                   type="button"
                   data-testid={`financeiro-user-row-${idx}`}
                   onClick={() => setSelectedUser(u)}
-                  className="flex-1 text-left flex flex-wrap items-center justify-between gap-4 cursor-pointer min-w-0"
+                  className="flex-1 text-left flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4 cursor-pointer min-w-0"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div
@@ -443,25 +451,26 @@ export default function Financeiro() {
                       <div className="text-xs truncate mt-0.5" style={{ color: "#8b87b8" }}>
                         {u.email}
                       </div>
+                      <FinanceiroUserLimitBadge user={u} />
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs">
-                    <div className="text-right">
+                  <div className="grid grid-cols-3 items-center gap-2 pt-3 border-t border-[#7F77DD]/15 md:border-t-0 md:pt-0 md:flex md:items-center md:gap-6 text-xs w-full md:w-auto">
+                    <div className="text-left md:text-right">
                       <div style={{ color: "#8b87b8" }}>Mapas / Leituras</div>
                       <div className="font-semibold" style={{ color: "#f0eeff" }}>
                         {u.maps_count} mapas · {u.readings_count} leituras
                       </div>
                     </div>
 
-                    <div className="text-right">
+                    <div className="text-center md:text-right">
                       <div style={{ color: "#8b87b8" }}>Tokens</div>
                       <div className="font-semibold" style={{ color: "#AFA9EC" }}>
                         {formatTokens(u.total_tokens)}
                       </div>
                     </div>
 
-                    <div className="text-right min-w-[110px]">
+                    <div className="text-right md:min-w-[110px]">
                       <div className="font-bold text-sm text-emerald-300">
                         {formatUsd(u.cost_usd)}
                       </div>

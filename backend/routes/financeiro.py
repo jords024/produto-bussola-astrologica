@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, load_only
 from database import get_db
 from models.models import User, GenerationLog, Analise
 from routes.auth import require_admin
+from services.ai_model_config_service import resolve_financeiro_users_ai_status
 
 router = APIRouter(prefix="/admin", tags=["financeiro"])
 logger = logging.getLogger(__name__)
@@ -96,6 +97,17 @@ def _resolve_date_range(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail="Período inválido. Use: all, today, 7d, month, last_month ou custom.",
     )
+
+
+def _apply_brasilia_date_filter(query, column, d_start: Optional[date], d_end: Optional[date]):
+    """Filtra coluna datetime (UTC naive) usando limites no fuso de Brasília (UTC-3)."""
+    if d_start:
+        dt_start_utc = datetime(d_start.year, d_start.month, d_start.day, 0, 0, 0) + timedelta(hours=3)
+        query = query.filter(column >= dt_start_utc)
+    if d_end:
+        dt_end_utc_exclusive = datetime(d_end.year, d_end.month, d_end.day, 0, 0, 0) + timedelta(days=1, hours=3)
+        query = query.filter(column < dt_end_utc_exclusive)
+    return query
 
 
 def _extract_analise_cost(a: Analise) -> Tuple[int, int, int, float]:
@@ -187,10 +199,7 @@ def _aggregate_costs(
             GenerationLog.created_at,
         )
     )
-    if d_start:
-        q_logs = q_logs.filter(cast(GenerationLog.created_at, Date) >= d_start)
-    if d_end:
-        q_logs = q_logs.filter(cast(GenerationLog.created_at, Date) <= d_end)
+    q_logs = _apply_brasilia_date_filter(q_logs, GenerationLog.created_at, d_start, d_end)
 
     total_maps = 0
     for log in q_logs.all():
@@ -223,10 +232,7 @@ def _aggregate_costs(
     ).filter(
         or_(Analise.cost_usd > 0, Analise.total_tokens > 0)
     )
-    if d_start:
-        q_agg = q_agg.filter(cast(Analise.created_at, Date) >= d_start)
-    if d_end:
-        q_agg = q_agg.filter(cast(Analise.created_at, Date) <= d_end)
+    q_agg = _apply_brasilia_date_filter(q_agg, Analise.created_at, d_start, d_end)
 
     total_readings = 0
     for row in q_agg.group_by(Analise.user_id).all():
@@ -257,10 +263,7 @@ def _aggregate_costs(
         or_(Analise.total_tokens.is_(None), Analise.total_tokens == 0),
         Analise.contexto.isnot(None),
     )
-    if d_start:
-        q_legacy = q_legacy.filter(cast(Analise.created_at, Date) >= d_start)
-    if d_end:
-        q_legacy = q_legacy.filter(cast(Analise.created_at, Date) <= d_end)
+    q_legacy = _apply_brasilia_date_filter(q_legacy, Analise.created_at, d_start, d_end)
 
     for a in q_legacy.all():
         p_tok, c_tok, t_tok, cost = _extract_analise_cost(a)
@@ -297,7 +300,7 @@ def get_financeiro_summary(
     end_date: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     role: str = Query("all"),
-    sort: str = Query("highest_cost"),
+    sort: str = Query("newest"),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -309,7 +312,7 @@ def get_financeiro_summary(
             detail="Filtro de papel inválido. Use all, client, internal_client, admin ou lead.",
         )
 
-    sort_by = (sort or "highest_cost").strip().lower()
+    sort_by = (sort or "newest").strip().lower()
     if sort_by not in ("highest_cost", "lowest_cost", "newest", "oldest"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -321,7 +324,19 @@ def get_financeiro_summary(
     try:
         users_by_email = {}
         users_by_id = {}
-        for u in db.query(User).options(load_only(User.id, User.name, User.email, User.role)).all():
+        for u in db.query(User).options(
+            load_only(
+                User.id,
+                User.name,
+                User.email,
+                User.role,
+                User.daily_request_limit,
+                User.max_total_requests,
+                User.request_limit_mode,
+                User.ai_model_max_limit,
+                User.ai_model_daily_limit,
+            )
+        ).all():
             users_by_id[str(u.id)] = u
             if u.email:
                 users_by_email[u.email.strip().lower()] = u
@@ -366,6 +381,12 @@ def get_financeiro_summary(
             filtered_items = role_filtered_items
 
         filtered_items = _sort_financeiro_items(filtered_items, sort_by)
+
+        ai_status_map = resolve_financeiro_users_ai_status(users_by_id, db)
+        for item in filtered_items:
+            uid = item.get("user_id")
+            if uid and uid in ai_status_map:
+                item.update(ai_status_map[uid])
 
         total_cost_usd = round(sum(i["cost_usd"] for i in filtered_items), 5)
         total_cost_brl = round(total_cost_usd * USD_TO_BRL, 4)
@@ -479,22 +500,22 @@ def get_financeiro_user_reports(
                     Analise.created_at,
                 )
             ).filter(Analise.user_id == uid_val)
-            if d_start:
-                q_analises = q_analises.filter(cast(Analise.created_at, Date) >= d_start)
-            if d_end:
-                q_analises = q_analises.filter(cast(Analise.created_at, Date) <= d_end)
+            q_analises = _apply_brasilia_date_filter(q_analises, Analise.created_at, d_start, d_end)
 
             for a in q_analises.all():
                 p_tok, c_tok, t_tok, cost = _extract_analise_cost(a)
                 if cost == 0.0 and t_tok == 0:
                     continue
                 ctx = a.contexto if isinstance(a.contexto, dict) else {}
+                openai_cost = ctx.get("openai_cost") if isinstance(ctx.get("openai_cost"), dict) else {}
+                model_used = (openai_cost.get("model") or "").strip() or None
                 readings.append({
                     "id": str(a.id),
                     "data_alvo": a.data_alvo.isoformat() if a.data_alvo else None,
                     "data_fim": ctx.get("data_fim"),
                     "area": ctx.get("area"),
                     "pergunta": ctx.get("pergunta"),
+                    "model_used": model_used,
                     "sintese": a.sintese or "",
                     "textos": a.textos if isinstance(a.textos, dict) else {},
                     "posicoes": {},
@@ -526,10 +547,7 @@ def get_financeiro_user_reports(
                     GenerationLog.created_at,
                 )
             ).filter(func.lower(GenerationLog.email) == lookup_email)
-            if d_start:
-                q_logs = q_logs.filter(cast(GenerationLog.created_at, Date) >= d_start)
-            if d_end:
-                q_logs = q_logs.filter(cast(GenerationLog.created_at, Date) <= d_end)
+            q_logs = _apply_brasilia_date_filter(q_logs, GenerationLog.created_at, d_start, d_end)
 
             for log in q_logs.all():
                 p_tok, c_tok, t_tok, cost = _extract_gen_log_cost(log)

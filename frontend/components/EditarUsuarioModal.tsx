@@ -7,6 +7,8 @@ import { toast } from "@/components/Toast";
 import AccessExpirationSelector, { type AccessPreset } from "@/components/AccessExpirationSelector";
 import MultipleProfilesPermissionFields from "@/components/MultipleProfilesPermissionFields";
 import RequestLimitsFields, { type RequestLimitMode } from "@/components/RequestLimitsFields";
+import UserAiModelOverridesFields from "@/components/UserAiModelOverridesFields";
+import type { AiModelCatalogItem } from "@/components/AiModelSelector";
 import EditarUsuarioDadosTab, { type EditableUserRole } from "@/components/EditarUsuarioDadosTab";
 
 export interface UserToEdit {
@@ -58,6 +60,15 @@ export default function EditarUsuarioModal({
   const [dailyLimit, setDailyLimit] = useState("8");
   const [unlimitedTotal, setUnlimitedTotal] = useState(true);
   const [totalLimit, setTotalLimit] = useState("100");
+  const [aiModelsLoading, setAiModelsLoading] = useState(false);
+  const [aiModelsLoaded, setAiModelsLoaded] = useState(false);
+  const [aiModelMax, setAiModelMax] = useState("");
+  const [aiModelDaily, setAiModelDaily] = useState("");
+  const [activeAiModel, setActiveAiModel] = useState("");
+  const [activeAiPhase, setActiveAiPhase] = useState<"max_limit" | "daily_limit">("max_limit");
+  const [globalMaxModel, setGlobalMaxModel] = useState("gpt-5.6-sol");
+  const [globalDailyModel, setGlobalDailyModel] = useState("gpt-4o-mini");
+  const [aiCatalog, setAiCatalog] = useState<AiModelCatalogItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -102,8 +113,57 @@ export default function EditarUsuarioModal({
         setUnlimitedTotal(true);
         setTotalLimit("100");
       }
+      setAiModelsLoaded(false);
+      setAiModelMax("");
+      setAiModelDaily("");
+      setActiveAiModel("");
     }
   }, [user]);
+
+  useEffect(() => {
+    if (
+      !isOpen ||
+      !user ||
+      role === "admin" ||
+      activeTab !== "limites" ||
+      aiModelsLoaded ||
+      typeof api.get !== "function"
+    ) {
+      return;
+    }
+    let cancelled = false;
+    setAiModelsLoading(true);
+    Promise.all([
+      api.get<{
+        ai_model_max_limit?: string | null;
+        ai_model_daily_limit?: string | null;
+        active_ai_model?: string;
+        active_ai_phase?: "max_limit" | "daily_limit";
+        global_max_model?: string;
+        global_daily_model?: string;
+      }>(`/admin/users/limits?user_id=${encodeURIComponent(user.id)}`),
+      api.get<{ catalog?: AiModelCatalogItem[] }>("/admin/ai-models/config"),
+    ])
+      .then(([limitsRes, cfgRes]) => {
+        if (cancelled) return;
+        setAiModelMax(limitsRes.ai_model_max_limit || "");
+        setAiModelDaily(limitsRes.ai_model_daily_limit || "");
+        setActiveAiModel(limitsRes.active_ai_model || "");
+        setActiveAiPhase(limitsRes.active_ai_phase === "daily_limit" ? "daily_limit" : "max_limit");
+        setGlobalMaxModel(limitsRes.global_max_model || "gpt-5.6-sol");
+        setGlobalDailyModel(limitsRes.global_daily_model || "gpt-4o-mini");
+        setAiCatalog(cfgRes.catalog || []);
+        setAiModelsLoaded(true);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setAiModelsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, user, role, activeTab, aiModelsLoaded]);
 
   useEffect(() => {
     if (role === "admin" && activeTab !== "dados") {
@@ -170,6 +230,13 @@ export default function EditarUsuarioModal({
       }
 
       await api.put(`/admin/users/${user.id}`, payload);
+      if (role !== "admin" && aiModelsLoaded && typeof api.patch === "function") {
+        await api.patch("/admin/users/limits", {
+          user_id: user.id,
+          ai_model_max_limit: aiModelMax.trim() || null,
+          ai_model_daily_limit: aiModelDaily.trim() || null,
+        });
+      }
       toast.success("Usuário atualizado com sucesso!");
       onUserUpdated();
       onClose();
@@ -347,6 +414,19 @@ export default function EditarUsuarioModal({
                     onUnlimitedTotalChange={setUnlimitedTotal}
                     totalLimit={totalLimit}
                     onTotalLimitChange={setTotalLimit}
+                  />
+                  <UserAiModelOverridesFields
+                    role={role}
+                    loading={aiModelsLoading}
+                    activeModel={activeAiModel}
+                    activePhase={activeAiPhase}
+                    globalMaxModel={globalMaxModel}
+                    globalDailyModel={globalDailyModel}
+                    aiModelMax={aiModelMax}
+                    aiModelDaily={aiModelDaily}
+                    onChangeAiModelMax={setAiModelMax}
+                    onChangeAiModelDaily={setAiModelDaily}
+                    catalog={aiCatalog}
                   />
                 </div>
               )}

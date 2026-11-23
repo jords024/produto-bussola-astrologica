@@ -582,5 +582,99 @@ def test_create_and_update_internal_client_user():
     assert res_update_back.json()["user"]["role"] == "internal_client"
 
 
+def test_list_panel_users_date_filter_and_sort_order():
+    from datetime import datetime, timezone
+    token = get_admin_token()
+    tag = uuid.uuid4().hex[:8]
+
+    db = SessionLocal()
+    try:
+        u_oldest = User(
+            id=str(uuid.uuid4()),
+            name="Usuario Mais Antigo",
+            email=f"testpaneluser_old_{tag}@exemplo.com",
+            password_hash=hash_password("senha123"),
+            role="client",
+            is_active=True,
+            created_at=datetime(2025, 1, 10, 10, 0, 0, tzinfo=timezone.utc),
+        )
+        u_middle = User(
+            id=str(uuid.uuid4()),
+            name="Usuario Intermediario",
+            email=f"testpaneluser_mid_{tag}@exemplo.com",
+            password_hash=hash_password("senha123"),
+            role="client",
+            is_active=True,
+            created_at=datetime(2025, 2, 15, 10, 0, 0, tzinfo=timezone.utc),
+        )
+        u_newest = User(
+            id=str(uuid.uuid4()),
+            name="Usuario Mais Novo",
+            email=f"testpaneluser_new_{tag}@exemplo.com",
+            password_hash=hash_password("senha123"),
+            role="client",
+            is_active=True,
+            created_at=datetime(2025, 3, 20, 10, 0, 0, tzinfo=timezone.utc),
+        )
+        db.add_all([u_oldest, u_middle, u_newest])
+        db.commit()
+    finally:
+        db.close()
+
+    # 1) Ordenação padrão (desc): mais recente primeiro (após Super Admin)
+    res_desc = client.get(
+        f"/admin/users?search=testpaneluser_&sort_order=desc",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_desc.status_code == 200
+    emails_desc = [u["email"] for u in res_desc.json()["items"]]
+    assert emails_desc == [
+        f"testpaneluser_new_{tag}@exemplo.com",
+        f"testpaneluser_mid_{tag}@exemplo.com",
+        f"testpaneluser_old_{tag}@exemplo.com",
+    ]
+
+    # 2) Ordenação ascendente: mais antigo primeiro
+    res_asc = client.get(
+        f"/admin/users?search=testpaneluser_&sort_order=asc",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_asc.status_code == 200
+    emails_asc = [u["email"] for u in res_asc.json()["items"]]
+    assert emails_asc == [
+        f"testpaneluser_old_{tag}@exemplo.com",
+        f"testpaneluser_mid_{tag}@exemplo.com",
+        f"testpaneluser_new_{tag}@exemplo.com",
+    ]
+
+    # 3) Filtro por intervalo de datas (start_date e end_date)
+    res_range = client.get(
+        "/admin/users?search=testpaneluser_&start_date=2025-02-01&end_date=2025-02-28",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_range.status_code == 200
+    emails_range = [u["email"] for u in res_range.json()["items"]]
+    assert emails_range == [f"testpaneluser_mid_{tag}@exemplo.com"]
+
+    # 4) Filtro apenas com start_date
+    res_start = client.get(
+        "/admin/users?search=testpaneluser_&start_date=2025-02-01&sort_order=asc",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_start.status_code == 200
+    assert [u["email"] for u in res_start.json()["items"]] == [
+        f"testpaneluser_mid_{tag}@exemplo.com",
+        f"testpaneluser_new_{tag}@exemplo.com",
+    ]
+
+    # 5) Ordenação inválida rejeitada (422)
+    res_invalid = client.get(
+        "/admin/users?sort_order=invalid",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_invalid.status_code == 422
+
+
+
 
 

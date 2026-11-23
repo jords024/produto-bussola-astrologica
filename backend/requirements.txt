@@ -26,8 +26,9 @@ timezonefinder>=9.0.0
 openai>=1.30.0
 
 # PDF
-reportlab==4.2.5
-svglib==1.5.1
+reportlab==5.1.0
+# Conversão de SVG para PDF (atualizado para corrigir CVE-2026-132275)
+svglib==2.3.1
 pillow>=10.0.0
 
 # Email

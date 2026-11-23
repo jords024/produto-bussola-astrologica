@@ -84,9 +84,10 @@ describe("AdminLayout Navegação e Painel", () => {
     });
 
     expect(screen.getAllByText("Painel de Gestão").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: /cadastrar mapa/i }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /cadastrar mapa/i })).toBeNull();
     expect(screen.getAllByRole("button", { name: /pesquisa de clientes/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: /histórico de gerações/i }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /histórico de gerações/i })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /financeiro/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /backup automático/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /sistema de logs/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /gestão de usuários/i }).length).toBeGreaterThan(0);
@@ -100,7 +101,9 @@ describe("AdminLayout Navegação e Painel", () => {
       expect(screen.getByRole("button", { name: /abrir menu de navegação/i })).toBeDefined();
     });
 
-    expect(screen.getAllByRole("heading", { name: /cadastrar mapa/i }).length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(screen.getAllByRole("heading", { name: /financeiro/i }).length).toBeGreaterThan(0);
+    });
   });
 
   it("abre o drawer mobile ao clicar no botão hamburger e fecha ao clicar no backdrop", async () => {

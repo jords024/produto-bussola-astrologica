@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, saveToken } from "@/lib/api";
+import { api, saveToken, clearToken } from "@/lib/api";
 
 const C = {
   bg: "#0f0b1e",
@@ -30,6 +30,33 @@ export default function LoginPage() {
   const [successMsg, setSuccessMsg] = useState("");
   const [isForgot, setIsForgot] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const conviteParam = params.get("convite");
+    const emailParam = params.get("email");
+    if (emailParam) {
+      setEmail(emailParam);
+    }
+    if (conviteParam === "usado") {
+      setSuccessMsg("Você já concluiu seu cadastro! Entre com seu e-mail e senha para acessar.");
+    }
+
+    const existingToken =
+      localStorage.getItem("bussola_token") || localStorage.getItem("sirius_token");
+    if (existingToken) {
+      api
+        .get("/auth/me")
+        .then(() => {
+          router.replace("/admin");
+        })
+        .catch(() => {
+          clearToken();
+        });
+    }
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
