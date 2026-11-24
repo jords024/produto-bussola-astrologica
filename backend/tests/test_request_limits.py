@@ -359,3 +359,80 @@ def test_quota_then_daily_via_external_api(monkeypatch):
     )
     assert res_patch.status_code == 200
     assert res_patch.json()["request_limit_mode"] == "strict"
+
+
+def test_batch_update_user_request_limits():
+    token = get_admin_token()
+    tag = uuid.uuid4().hex[:8]
+    db = SessionLocal()
+    created_ids = []
+    try:
+        u1 = User(
+            id=str(uuid.uuid4()),
+            name="Aluno Lote 1",
+            email=f"batch_limit_1_{tag}@teste.com",
+            password_hash=hash_password("SenhaForte@123"),
+            role="client",
+            is_active=True,
+        )
+        u2 = User(
+            id=str(uuid.uuid4()),
+            name="Aluno Interno Lote 2",
+            email=f"batch_limit_2_{tag}@teste.com",
+            password_hash=hash_password("SenhaForte@123"),
+            role="internal_client",
+            is_active=True,
+        )
+        u_admin = User(
+            id=str(uuid.uuid4()),
+            name="Admin Lote Ignorado",
+            email=f"batch_limit_adm_{tag}@teste.com",
+            password_hash=hash_password("SenhaForte@123"),
+            role="admin",
+            is_active=True,
+        )
+        db.add_all([u1, u2, u_admin])
+        db.commit()
+        created_ids = [str(u1.id), str(u2.id), str(u_admin.id)]
+
+        # Lista vazia deve retornar 400
+        res_empty = client.put(
+            "/admin/users/batch-limits",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"ids": [], "request_limit_mode": "quota_then_daily", "max_total_requests": 300, "daily_request_limit": 5},
+        )
+        assert res_empty.status_code == 400
+
+        res = client.put(
+            "/admin/users/batch-limits",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "ids": created_ids,
+                "request_limit_mode": "quota_then_daily",
+                "max_total_requests": 300,
+                "daily_request_limit": 5,
+                "unlimited_total_requests": False,
+                "unlimited_daily_requests": False,
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["success"] is True
+        assert data["updated_count"] == 2
+        assert data["skipped_admin_count"] == 1
+
+        db.expire_all()
+        for uid in (created_ids[0], created_ids[1]):
+            refreshed = db.query(User).filter(User.id == uid).first()
+            assert refreshed.request_limit_mode == "quota_then_daily"
+            assert refreshed.max_total_requests == 300
+            assert refreshed.daily_request_limit == 5
+
+        adm_refreshed = db.query(User).filter(User.id == created_ids[2]).first()
+        assert adm_refreshed.max_total_requests is None
+        assert adm_refreshed.daily_request_limit is None
+    finally:
+        if created_ids:
+            db.query(User).filter(User.id.in_(created_ids)).delete(synchronize_session=False)
+            db.commit()
+        db.close()

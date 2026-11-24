@@ -81,4 +81,48 @@ describe("RequestLimitsFields Component", () => {
     expect(onUnlimitedTotalChange).toHaveBeenCalledWith(false);
     expect(onUnlimitedDailyChange).toHaveBeenCalledWith(false);
   });
+
+  it("exibe resumo com leituras realizadas e quanto falta para acabar a franquia inicial", () => {
+    const { rerender } = render(
+      <RequestLimitsFields
+        role="client"
+        limitMode="quota_then_daily"
+        unlimitedDaily={false}
+        onUnlimitedDailyChange={vi.fn()}
+        dailyLimit="5"
+        onDailyLimitChange={vi.fn()}
+        unlimitedTotal={false}
+        onUnlimitedTotalChange={vi.fn()}
+        totalLimit="300"
+        onTotalLimitChange={vi.fn()}
+        totalUsed={30}
+        dailyUsed={2}
+      />
+    );
+
+    const summary = screen.getByTestId("request-limits-usage-summary");
+    expect(summary.textContent).toContain("30 leitura(s) realizada(s) no total");
+    expect(summary.textContent).toContain("Faltam 270 para acabar a franquia inicial");
+
+    rerender(
+      <RequestLimitsFields
+        role="client"
+        limitMode="quota_then_daily"
+        unlimitedDaily={false}
+        onUnlimitedDailyChange={vi.fn()}
+        dailyLimit="5"
+        onDailyLimitChange={vi.fn()}
+        unlimitedTotal={false}
+        onUnlimitedTotalChange={vi.fn()}
+        totalLimit="300"
+        onTotalLimitChange={vi.fn()}
+        totalUsed={300}
+        dailyUsed={2}
+      />
+    );
+
+    expect(screen.getByTestId("request-limits-usage-summary").textContent).toContain(
+      "Franquia inicial concluída — operando no limite diário (2/5 hoje)"
+    );
+  });
 });

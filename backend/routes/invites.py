@@ -28,6 +28,8 @@ class CreateInviteRequest(BaseModel):
     daily_request_limit: Optional[int] = Field(None, description="Limite diário de leituras IA (None = ilimitado)")
     max_total_requests: Optional[int] = Field(None, description="Limite máximo total de leituras IA (None = ilimitado)")
     request_limit_mode: Optional[str] = Field("strict", description="'strict' ou 'quota_then_daily'")
+    allow_multiple_profiles: Optional[bool] = Field(False, description="Permite cadastrar múltiplas pessoas (perfis extras)")
+    max_extra_profiles: Optional[int] = Field(None, description="Máximo de perfis extras (None = ilimitado quando ativo)")
 
 
 class RegisterWithInviteRequest(BaseModel):
@@ -65,6 +67,12 @@ def create_invite(
     daily_limit = validate_optional_limit(body.daily_request_limit, "Limite diário") if role != "admin" else None
     max_total = validate_optional_limit(body.max_total_requests, "Limite máximo total") if role != "admin" else None
     limit_mode = normalize_limit_mode(body.request_limit_mode) if role != "admin" else "strict"
+    allow_multi = bool(body.allow_multiple_profiles) if role != "admin" else False
+    max_extra = (
+        validate_optional_limit(body.max_extra_profiles, "Limite de perfis extras")
+        if (role != "admin" and allow_multi)
+        else None
+    )
 
     invite = UserInvite(
         token=token,
@@ -75,6 +83,8 @@ def create_invite(
         daily_request_limit=daily_limit,
         max_total_requests=max_total,
         request_limit_mode=limit_mode,
+        allow_multiple_profiles=allow_multi,
+        max_extra_profiles=max_extra,
         created_at=now,
         created_by_id=current_user.id,
         is_used=False,
@@ -102,6 +112,8 @@ def create_invite(
         "daily_request_limit": invite.daily_request_limit,
         "max_total_requests": invite.max_total_requests,
         "request_limit_mode": invite.request_limit_mode or "strict",
+        "allow_multiple_profiles": bool(invite.allow_multiple_profiles),
+        "max_extra_profiles": invite.max_extra_profiles,
         "created_at": invite.created_at.isoformat() + "Z",
         "invite_path": invite_path,
         "invite_url": f"{base_url}{invite_path}",
@@ -161,6 +173,8 @@ def list_invites(
             "daily_request_limit": inv.daily_request_limit,
             "max_total_requests": inv.max_total_requests,
             "request_limit_mode": inv.request_limit_mode or "strict",
+            "allow_multiple_profiles": bool(inv.allow_multiple_profiles),
+            "max_extra_profiles": inv.max_extra_profiles,
             "created_at": inv.created_at.isoformat() + "Z",
             "is_used": inv.is_used,
             "used_at": inv.used_at.isoformat() + "Z" if inv.used_at else None,
@@ -287,6 +301,8 @@ def _finalize_verified_registration(db: Session, invite: UserInvite, verificatio
         daily_request_limit=invite.daily_request_limit if invite.role != "admin" else None,
         max_total_requests=invite.max_total_requests if invite.role != "admin" else None,
         request_limit_mode=(invite.request_limit_mode or "strict") if invite.role != "admin" else "strict",
+        allow_multiple_profiles=bool(invite.allow_multiple_profiles) if invite.role != "admin" else False,
+        max_extra_profiles=invite.max_extra_profiles if (invite.role != "admin" and invite.allow_multiple_profiles) else None,
     )
     db.add(new_user)
     db.flush()
@@ -617,6 +633,8 @@ def register_with_invite(
         daily_request_limit=invite.daily_request_limit if invite.role != "admin" else None,
         max_total_requests=invite.max_total_requests if invite.role != "admin" else None,
         request_limit_mode=(invite.request_limit_mode or "strict") if invite.role != "admin" else "strict",
+        allow_multiple_profiles=bool(invite.allow_multiple_profiles) if invite.role != "admin" else False,
+        max_extra_profiles=invite.max_extra_profiles if (invite.role != "admin" and invite.allow_multiple_profiles) else None,
     )
     db.add(new_user)
     db.flush()

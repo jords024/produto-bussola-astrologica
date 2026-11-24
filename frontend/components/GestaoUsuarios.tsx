@@ -13,6 +13,7 @@ import UsersMetricsCards from "@/components/UsersMetricsCards";
 import UsuarioCard from "@/components/UsuarioCard";
 import RedefinirSenhaModal from "@/components/RedefinirSenhaModal";
 import UsersFilterBar, { UserSortOrder } from "@/components/UsersFilterBar";
+import BatchEditLimitsModal from "@/components/BatchEditLimitsModal";
 
 export interface PanelUser {
   id: string;
@@ -33,6 +34,8 @@ export interface PanelUser {
   daily_request_limit?: number | null;
   max_total_requests?: number | null;
   request_limit_mode?: "strict" | "quota_then_daily";
+  daily_requests_used?: number;
+  total_requests_used?: number;
 }
 
 export default function GestaoUsuarios() {
@@ -49,6 +52,7 @@ export default function GestaoUsuarios() {
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false);
+  const [showBatchLimitsModal, setShowBatchLimitsModal] = useState(false);
   const [batchDeleteLoading, setBatchDeleteLoading] = useState(false);
   const [userToDelete, setUserToDelete] = useState<PanelUser | null>(null);
   const [singleUserDeleteLoading, setSingleUserDeleteLoading] = useState(false);
@@ -374,6 +378,15 @@ export default function GestaoUsuarios() {
               </button>
               <button
                 type="button"
+                data-testid="batch-edit-limits-btn"
+                onClick={() => setShowBatchLimitsModal(true)}
+                className="px-3.5 py-1.5 rounded-xl font-bold bg-[#7F77DD]/25 text-[#d6d3ff] border border-[#7F77DD]/45 hover:bg-[#7F77DD]/35 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-lg shadow-[#7F77DD]/10"
+              >
+                <span>⚡</span>
+                <span>Editar Limites de IA</span>
+              </button>
+              <button
+                type="button"
                 data-testid="batch-delete-users-btn"
                 onClick={() => setShowBatchDeleteModal(true)}
                 className="px-3.5 py-1.5 rounded-xl font-bold bg-rose-500/20 text-rose-300 border border-rose-500/35 hover:bg-rose-500/30 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-lg shadow-rose-500/10"
@@ -479,6 +492,14 @@ export default function GestaoUsuarios() {
         loading={batchDeleteLoading}
         onClose={() => setShowBatchDeleteModal(false)}
         onConfirm={handleConfirmBatchDelete}
+      />
+
+      {/* Modal de Edição de Limites de IA em Lote */}
+      <BatchEditLimitsModal
+        isOpen={showBatchLimitsModal}
+        selectedUserIds={selectedUserIds}
+        onClose={() => setShowBatchLimitsModal(false)}
+        onUpdated={() => { setSelectedUserIds([]); fetchUsers(); }}
       />
     </div>
   );

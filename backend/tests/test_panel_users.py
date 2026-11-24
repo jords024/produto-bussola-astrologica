@@ -29,6 +29,7 @@ def cleanup_test_users():
     try:
         from sqlalchemy import text
         db.execute(text("UPDATE user_invites SET used_by_id = NULL, created_by_id = NULL WHERE used_by_id IN (SELECT id FROM users WHERE email LIKE :p) OR created_by_id IN (SELECT id FROM users WHERE email LIKE :p)"), {"p": "%testpaneluser%"})
+        db.execute(text("DELETE FROM analises WHERE user_id IN (SELECT id FROM users WHERE email LIKE :p)"), {"p": "%testpaneluser%"})
         db.execute(text("DELETE FROM user_invites WHERE token LIKE :p"), {"p": "%testtoken%"})
         db.execute(text("DELETE FROM users WHERE email LIKE :p"), {"p": "%testpaneluser%"})
         db.commit()
@@ -673,6 +674,73 @@ def test_list_panel_users_date_filter_and_sort_order():
         headers={"Authorization": f"Bearer {token}"},
     )
     assert res_invalid.status_code == 422
+
+
+def test_list_panel_users_returns_request_usage_counts():
+    from datetime import date, datetime, timedelta
+    token = get_admin_token()
+    tag = uuid.uuid4().hex[:6]
+    email = f"testpaneluser_usage_{tag}@exemplo.com"
+
+    db = SessionLocal()
+    try:
+        u = User(
+            id=str(uuid.uuid4()),
+            name="Aluno Consumo Leituras",
+            email=email,
+            password_hash=hash_password("senha123"),
+            role="client",
+            is_active=True,
+            max_total_requests=300,
+            daily_request_limit=5,
+            request_limit_mode="quota_then_daily",
+        )
+        db.add(u)
+        db.commit()
+        uid = str(u.id)
+
+        now = datetime.utcnow()
+        # 1 leitura hoje (BRT) com status ok
+        db.add(Analise(
+            id=str(uuid.uuid4()),
+            user_id=uid,
+            data_alvo=date.today(),
+            sintese="Hoje",
+            status="ok",
+            created_at=now,
+        ))
+        # 1 leitura de 3 dias atrás com status ok
+        db.add(Analise(
+            id=str(uuid.uuid4()),
+            user_id=uid,
+            data_alvo=date.today() - timedelta(days=3),
+            sintese="Antiga",
+            status="ok",
+            created_at=now - timedelta(days=3),
+        ))
+        # 1 análise pendente/erro (não deve contar como consumo)
+        db.add(Analise(
+            id=str(uuid.uuid4()),
+            user_id=uid,
+            data_alvo=date.today(),
+            sintese="Falha",
+            status="error",
+            created_at=now,
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    res = client.get(
+        f"/admin/users?search={tag}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 200
+    items = res.json()["items"]
+    assert len(items) == 1
+    assert items[0]["total_requests_used"] == 2
+    assert items[0]["daily_requests_used"] == 1
+
 
 
 

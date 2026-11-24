@@ -281,13 +281,26 @@ def list_panel_users(
     if end_date:
         q = q.filter(cast(User.created_at, Date) <= end_date)
 
+    from services.request_limit_service import count_all_users_ai_requests
+    usage_by_user = count_all_users_ai_requests(db)
+
     order_col = User.created_at.asc() if sort_order == "asc" else User.created_at.desc()
     users = q.order_by(order_col).all()
     items = []
     for u in users:
         is_super = (u.email.strip().lower() == super_admin_email) if u.email else False
         is_cur = (str(u.id) == str(current_user.id))
-        items.append(serialize_panel_user(u, is_super=is_super, is_current=is_cur, include_birth_summary=True))
+        usage = usage_by_user.get(str(u.id), {})
+        items.append(
+            serialize_panel_user(
+                u,
+                is_super=is_super,
+                is_current=is_cur,
+                include_birth_summary=True,
+                daily_used=usage.get("daily_used", 0),
+                total_used=usage.get("total_used", 0),
+            )
+        )
 
     # Super admin no topo
     items.sort(key=lambda x: (not x["is_super_admin"],))

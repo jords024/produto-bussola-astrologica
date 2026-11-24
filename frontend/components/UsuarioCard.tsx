@@ -160,27 +160,44 @@ export default function UsuarioCard({
             )}
 
             {/* Badges de Limite de Requisições IA */}
-            {!isAdmin && (u.daily_request_limit || u.max_total_requests) && (
-              <span
-                data-testid={`badge-limits-${u.id}`}
-                className="text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1"
-                style={{
-                  background: "rgba(127, 119, 221, 0.16)",
-                  color: "#c4b5fd",
-                  border: "1px solid rgba(127, 119, 221, 0.35)",
-                }}
-              >
-                ⚡{" "}
-                {u.request_limit_mode === "quota_then_daily" && u.max_total_requests && u.daily_request_limit
-                  ? `${u.max_total_requests} livres → ${u.daily_request_limit}/dia`
-                  : [
-                      u.daily_request_limit ? `${u.daily_request_limit}/dia` : null,
-                      u.max_total_requests ? `${u.max_total_requests} total` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-              </span>
-            )}
+            {!isAdmin && (u.daily_request_limit || u.max_total_requests) && (() => {
+              const totalUsed = u.total_requests_used ?? 0;
+              const dailyUsed = u.daily_requests_used ?? 0;
+              const isQuotaMode = u.request_limit_mode === "quota_then_daily" && u.max_total_requests && u.daily_request_limit;
+
+              let labelText = "";
+              if (isQuotaMode && u.max_total_requests && u.daily_request_limit) {
+                const remainingQuota = Math.max(0, u.max_total_requests - totalUsed);
+                labelText =
+                  remainingQuota > 0
+                    ? `${totalUsed}/${u.max_total_requests} realizadas (faltam ${remainingQuota}) → ${u.daily_request_limit}/dia`
+                    : `Franquia esgotada (${totalUsed}/${u.max_total_requests}) · Hoje: ${dailyUsed}/${u.daily_request_limit}`;
+              } else {
+                const parts: string[] = [];
+                if (u.max_total_requests) {
+                  const remainingTotal = Math.max(0, u.max_total_requests - totalUsed);
+                  parts.push(`${totalUsed}/${u.max_total_requests} total (faltam ${remainingTotal})`);
+                }
+                if (u.daily_request_limit) {
+                  parts.push(`Hoje: ${dailyUsed}/${u.daily_request_limit}`);
+                }
+                labelText = parts.join(" · ");
+              }
+
+              return (
+                <span
+                  data-testid={`badge-limits-${u.id}`}
+                  className="text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1"
+                  style={{
+                    background: "rgba(127, 119, 221, 0.16)",
+                    color: "#c4b5fd",
+                    border: "1px solid rgba(127, 119, 221, 0.35)",
+                  }}
+                >
+                  ⚡ {labelText}
+                </span>
+              );
+            })()}
           </div>
 
           <div className="text-xs" style={{ color: "#8b87b8" }}>

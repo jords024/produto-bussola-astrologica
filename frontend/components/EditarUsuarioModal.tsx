@@ -26,6 +26,8 @@ export interface UserToEdit {
   daily_request_limit?: number | null;
   max_total_requests?: number | null;
   request_limit_mode?: RequestLimitMode;
+  daily_requests_used?: number;
+  total_requests_used?: number;
 }
 
 interface EditarUsuarioModalProps {
@@ -414,6 +416,8 @@ export default function EditarUsuarioModal({
                     onUnlimitedTotalChange={setUnlimitedTotal}
                     totalLimit={totalLimit}
                     onTotalLimitChange={setTotalLimit}
+                    dailyUsed={user?.daily_requests_used}
+                    totalUsed={user?.total_requests_used}
                   />
                   <UserAiModelOverridesFields
                     role={role}

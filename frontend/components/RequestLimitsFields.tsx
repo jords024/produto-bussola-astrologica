@@ -16,6 +16,8 @@ interface RequestLimitsFieldsProps {
   onUnlimitedTotalChange: (val: boolean) => void;
   totalLimit: string;
   onTotalLimitChange: (val: string) => void;
+  dailyUsed?: number;
+  totalUsed?: number;
 }
 
 export default function RequestLimitsFields({
@@ -30,6 +32,8 @@ export default function RequestLimitsFields({
   onUnlimitedTotalChange,
   totalLimit,
   onTotalLimitChange,
+  dailyUsed,
+  totalUsed,
 }: RequestLimitsFieldsProps) {
   if (role === "admin") {
     return null;
@@ -62,6 +66,45 @@ export default function RequestLimitsFields({
           Controla apenas novas gerações com IA (reset diário à meia-noite, horário de Brasília).
         </div>
       </div>
+
+      {/* Resumo de Consumo Atual */}
+      {(totalUsed !== undefined || dailyUsed !== undefined) && (() => {
+        const usedTotalVal = totalUsed ?? 0;
+        const usedDailyVal = dailyUsed ?? 0;
+        const parsedTotal = !unlimitedTotal ? Math.max(0, Number(totalLimit) || 0) : 0;
+        const parsedDaily = !unlimitedDaily ? Math.max(0, Number(dailyLimit) || 0) : 0;
+        const remainingMain = parsedTotal > 0 ? Math.max(0, parsedTotal - usedTotalVal) : null;
+
+        return (
+          <div
+            data-testid="request-limits-usage-summary"
+            className="p-2.5 rounded-lg text-[11px] space-y-1"
+            style={{
+              background: "rgba(15, 11, 30, 0.55)",
+              border: "1px solid rgba(127, 119, 221, 0.28)",
+              color: "#d6d3ff",
+            }}
+          >
+            <div>
+              📊 <strong>{usedTotalVal}</strong> leitura(s) realizada(s) no total
+              {parsedDaily > 0 && !(isQuotaThenDaily && remainingMain !== null && remainingMain > 0) && (
+                <span> · Hoje: <strong>{usedDailyVal}/{parsedDaily}</strong></span>
+              )}
+            </div>
+            {remainingMain !== null && (
+              <div style={{ color: remainingMain > 0 ? "#38bdf8" : "#fbbf24" }}>
+                {isQuotaThenDaily
+                  ? remainingMain > 0
+                    ? `⏳ Faltam ${remainingMain} para acabar a franquia inicial (depois entra ${parsedDaily > 0 ? `${parsedDaily}/dia` : "diário ilimitado"})`
+                    : `🔄 Franquia inicial concluída — operando no limite diário (${usedDailyVal}/${parsedDaily > 0 ? parsedDaily : "∞"} hoje)`
+                  : remainingMain > 0
+                  ? `⏳ Faltam ${remainingMain} de ${parsedTotal} no limite máximo total`
+                  : `🔒 Limite máximo total atingido (${usedTotalVal}/${parsedTotal})`}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Modo de Limite */}
       {onLimitModeChange && (

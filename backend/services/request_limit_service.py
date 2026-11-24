@@ -83,6 +83,43 @@ def count_user_ai_requests(
     }
 
 
+def count_all_users_ai_requests(
+    db: Session,
+    now_utc: Optional[datetime] = None,
+) -> dict:
+    """Agrupa contagem de gerações de IA (hoje BRT e total) por user_id em duas queries."""
+    start_utc, end_utc = get_brasilia_day_utc_bounds(now_utc)
+
+    total_rows = (
+        db.query(Analise.user_id, func.count(Analise.id))
+        .filter(Analise.status == "ok", Analise.user_id.isnot(None))
+        .group_by(Analise.user_id)
+        .all()
+    )
+    daily_rows = (
+        db.query(Analise.user_id, func.count(Analise.id))
+        .filter(
+            Analise.status == "ok",
+            Analise.user_id.isnot(None),
+            Analise.created_at >= start_utc,
+            Analise.created_at < end_utc,
+        )
+        .group_by(Analise.user_id)
+        .all()
+    )
+
+    usage: dict = {}
+    for uid, cnt in total_rows:
+        key = str(uid)
+        usage[key] = {"total_used": int(cnt or 0), "daily_used": 0}
+    for uid, cnt in daily_rows:
+        key = str(uid)
+        if key not in usage:
+            usage[key] = {"total_used": 0, "daily_used": 0}
+        usage[key]["daily_used"] = int(cnt or 0)
+    return usage
+
+
 def require_within_request_limits(
     user: User,
     db: Session,

@@ -8,6 +8,7 @@ vi.mock("@/lib/api", () => ({
     get: vi.fn(),
     delete: vi.fn(),
     post: vi.fn(),
+    put: vi.fn(),
   },
 }));
 
@@ -459,6 +460,98 @@ describe("GestaoUsuarios Component", () => {
       expect((startDateInput as HTMLInputElement).value).toBe("");
       expect((endDateInput as HTMLInputElement).value).toBe("");
       expect(api.get).toHaveBeenLastCalledWith("/admin/users");
+    });
+  });
+
+  it("exibe no card do usuário as leituras realizadas, quanto falta na franquia e transição para o limite diário", async () => {
+    (api.get as any).mockResolvedValueOnce({
+      total: 2,
+      items: [
+        {
+          id: "u-phase1",
+          name: "Gabriela Fase 1",
+          email: "gabi1@exemplo.com",
+          role: "client",
+          is_active: true,
+          is_super_admin: false,
+          max_total_requests: 300,
+          daily_request_limit: 5,
+          request_limit_mode: "quota_then_daily",
+          total_requests_used: 45,
+          daily_requests_used: 3,
+        },
+        {
+          id: "u-phase2",
+          name: "Gabriela Fase 2",
+          email: "gabi2@exemplo.com",
+          role: "client",
+          is_active: true,
+          is_super_admin: false,
+          max_total_requests: 300,
+          daily_request_limit: 5,
+          request_limit_mode: "quota_then_daily",
+          total_requests_used: 300,
+          daily_requests_used: 2,
+        },
+      ],
+    });
+
+    render(<GestaoUsuarios />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("badge-limits-u-phase1")).toBeDefined();
+    });
+
+    expect(screen.getByTestId("badge-limits-u-phase1").textContent).toContain(
+      "45/300 realizadas (faltam 255) → 5/dia"
+    );
+    expect(screen.getByTestId("badge-limits-u-phase2").textContent).toContain(
+      "Franquia esgotada (300/300) · Hoje: 2/5"
+    );
+  });
+
+  it("permite selecionar múltiplos usuários e editar limites de IA em lote", async () => {
+    (api.put as any).mockResolvedValueOnce({
+      success: true,
+      updated_count: 2,
+      skipped_admin_count: 0,
+      message: "Limites de IA atualizados para 2 usuário(s).",
+    });
+
+    render(<GestaoUsuarios />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("select-user-2")).toBeDefined();
+    });
+
+    // Seleciona João (id "2") e Maria (id "3")
+    fireEvent.click(screen.getByTestId("select-user-2"));
+    fireEvent.click(screen.getByTestId("select-user-3"));
+
+    const batchLimitsBtn = screen.getByTestId("batch-edit-limits-btn");
+    fireEvent.click(batchLimitsBtn);
+
+    expect(screen.getByTestId("batch-edit-limits-modal")).toBeDefined();
+    expect(screen.getByText(/2 usuário\(s\)/i)).toBeDefined();
+
+    fireEvent.change(screen.getByTestId("total-limit-input"), { target: { value: "200" } });
+    fireEvent.change(screen.getByTestId("daily-limit-input"), { target: { value: "4" } });
+
+    fireEvent.click(screen.getByTestId("batch-edit-limits-submit-btn"));
+
+    await waitFor(() => {
+      expect(api.put).toHaveBeenCalledWith("/admin/users/batch-limits", {
+        ids: ["2", "3"],
+        request_limit_mode: "quota_then_daily",
+        unlimited_daily_requests: false,
+        daily_request_limit: 4,
+        unlimited_total_requests: false,
+        max_total_requests: 200,
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("batch-edit-limits-modal")).toBeNull();
     });
   });
 });

@@ -164,4 +164,62 @@ describe("PesquisaClientes", () => {
 
     expect(await screen.findByText(/1 mapa\(s\) astral\(is\) gerado\(s\) com sucesso/i)).toBeDefined();
   });
+
+  it("pagina os mapas gerados de 5 em 5 e carrega apenas os itens da página atual", async () => {
+    const sevenClients = Array.from({ length: 7 }, (_, i) => ({
+      ...mockClients[0],
+      id: `cli-${i + 1}`,
+      name: `Cliente Paginado ${i + 1}`,
+      email: `cli${i + 1}@example.com`,
+      status: "ready",
+    }));
+
+    (api.get as any).mockImplementation((url: string) => {
+      const detailMatch = url.match(/\/admin\/clients\/(cli-\d+)/);
+      if (detailMatch) {
+        const cid = detailMatch[1];
+        const idx = cid.replace("cli-", "");
+        return Promise.resolve({
+          id: cid,
+          name: `Cliente Paginado ${idx}`,
+          sun_sign: "Peixes",
+          birth_date: "1998-03-09",
+          birth_time: "18:35",
+          chart: { id: `chart-${idx}`, svg_content: `<svg></svg>`, status: "ready" },
+        });
+      }
+      if (url.includes("/admin/clients")) {
+        return Promise.resolve({ items: sevenClients });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<PesquisaClientes onOpenClient={vi.fn()} onGoToHome={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("pagination-controls")).toBeDefined();
+    });
+
+    const pagination = screen.getByTestId("pagination-controls");
+    expect(pagination.textContent).toContain("Exibindo 1 a 5 de 7 mapas (5 por página)");
+
+    // Página 1: deve buscar apenas cli-1..cli-5, sem disparar cli-6 ou cli-7
+    await waitFor(() => {
+      expect(screen.getByText(/Mapa Astral de Cliente Paginado 1/i)).toBeDefined();
+      expect(screen.getByText(/Mapa Astral de Cliente Paginado 5/i)).toBeDefined();
+    });
+    expect(api.get).not.toHaveBeenCalledWith("/admin/clients/cli-6");
+    expect(api.get).not.toHaveBeenCalledWith("/admin/clients/cli-7");
+
+    // Avança para página 2
+    fireEvent.click(screen.getByTestId("next-page-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Mapa Astral de Cliente Paginado 6/i)).toBeDefined();
+      expect(screen.getByText(/Mapa Astral de Cliente Paginado 7/i)).toBeDefined();
+    });
+    expect(screen.getByTestId("pagination-controls").textContent).toContain(
+      "Exibindo 6 a 7 de 7 mapas (5 por página)"
+    );
+  });
 });

@@ -441,3 +441,52 @@ def test_verify_register_link_flow():
     assert data["token"]
 
 
+def test_invite_with_allow_multiple_profiles_via_api_key(monkeypatch):
+    seed_admin()
+    monkeypatch.setenv("EXTERNAL_API_KEY", "test_multi_profile_api_key")
+    headers = {"X-API-Key": "test_multi_profile_api_key"}
+
+    res_inv = client.post(
+        "/admin/invites",
+        headers=headers,
+        json={
+            "role": "client",
+            "validity_type": "never",
+            "allow_multiple_profiles": True,
+            "max_extra_profiles": 5,
+        },
+    )
+    assert res_inv.status_code == 200
+    inv = res_inv.json()
+    assert inv["allow_multiple_profiles"] is True
+    assert inv["max_extra_profiles"] == 5
+
+    # Cadastro via convite deve herdar allow_multiple_profiles e max_extra_profiles
+    email = f"multi_inv_{uuid.uuid4().hex[:8]}@example.com"
+    res_reg = client.post(
+        "/auth/register-with-invite",
+        json={
+            "token": inv["token"],
+            "name": "Aluno Multi Perfil",
+            "email": email,
+            "password": "Sirius@2026StrongPassword",
+        },
+    )
+    assert res_reg.status_code == 200
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        assert user is not None
+        assert user.allow_multiple_profiles is True
+        assert user.max_extra_profiles == 5
+    finally:
+        if user:
+            db.query(UserInvite).filter(UserInvite.used_by_id == user.id).update(
+                {"used_by_id": None}, synchronize_session=False
+            )
+            db.delete(user)
+            db.commit()
+        db.close()
+
+

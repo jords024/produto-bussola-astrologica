@@ -98,6 +98,8 @@ def serialize_panel_user(
     is_super: bool = False,
     is_current: bool = False,
     include_birth_summary: bool = False,
+    daily_used: int = 0,
+    total_used: int = 0,
 ) -> dict:
     """Serializa usuário do painel administrativo de forma padronizada."""
     payload = {
@@ -116,6 +118,8 @@ def serialize_panel_user(
         "daily_request_limit": None if u.role == "admin" else getattr(u, "daily_request_limit", None),
         "max_total_requests": None if u.role == "admin" else getattr(u, "max_total_requests", None),
         "request_limit_mode": "strict" if u.role == "admin" else (getattr(u, "request_limit_mode", None) or "strict"),
+        "daily_requests_used": 0 if u.role == "admin" else int(daily_used or 0),
+        "total_requests_used": 0 if u.role == "admin" else int(total_used or 0),
     }
     if include_birth_summary:
         payload["created_at"] = u.created_at.isoformat() if u.created_at else None

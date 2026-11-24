@@ -160,3 +160,14 @@ Este documento registra todas as alterações estruturais realizadas nas tabelas
   - `ai_model_configs.max_limit_fallback_model` (VARCHAR, Not Null, Default `'gpt-5.6-luna'`)
   - `ai_model_configs.daily_limit_fallback_model` (VARCHAR, Not Null, Default `'gpt-4o-mini'`)
 - **Script de Migração:** `backend/scripts/add_ai_model_configs.py` (também aplicado automaticamente via `ensure_schema` no startup).
+
+
+---
+
+### [2026-11-24] Permissão de Múltiplos Perfis em Convites (`user_invites`)
+- **Tabela Afetada:** `user_invites`
+- **Objetivo:** Permitir configurar `allow_multiple_profiles` e `max_extra_profiles` diretamente na criação de convites (`POST /admin/invites`, inclusive via `X-API-Key`), aplicando automaticamente ao usuário no cadastro.
+- **Colunas Criadas:**
+  - `user_invites.allow_multiple_profiles` (BOOLEAN, Default FALSE)
+  - `user_invites.max_extra_profiles` (INTEGER, Nullable — `NULL` indica ilimitado quando ativo)
+- **Script de Migração:** `backend/scripts/add_invite_multiple_profiles_columns.py` (também aplicado automaticamente via `ensure_schema` no startup).

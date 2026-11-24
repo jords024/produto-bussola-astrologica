@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { ZODIAC_SIGNS } from "@/lib/locationConstants";
 import MissingInfoModal from "./MissingInfoModal";
-import GeneratedChartCard from "./GeneratedChartCard";
+import PesquisaClientesChartsList from "./PesquisaClientesChartsList";
 import type { Client } from "./ClientCard";
 
 interface PesquisaClientesProps {
@@ -426,38 +426,12 @@ export default function PesquisaClientes({ onOpenClient, onGoToHome }: PesquisaC
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Seção de Mapas Astrais Gerados */}
-          {readyClients.length > 0 && (
-            <div data-testid="generated-charts-section" className="space-y-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">🌌</span>
-                  <h3 className="font-bold text-base" style={{ color: "#f0eeff" }}>
-                    {readyClients.length === 1 ? "Mapa Astral Gerado" : `Mapas Astrais Gerados (${readyClients.length})`}
-                  </h3>
-                </div>
-                <div
-                  data-testid="header-date-range-badge"
-                  className="px-3 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5"
-                  style={{
-                    background: "rgba(127, 119, 221, 0.2)",
-                    color: "#AFA9EC",
-                    border: "1px solid rgba(127, 119, 221, 0.35)",
-                  }}
-                >
-                  <span>🔍 Filtro de Busca:</span>
-                  <span>{formattedDateSelection}</span>
-                </div>
-              </div>
-              {readyClients.map((c) => (
-                <GeneratedChartCard
-                  key={c.id}
-                  clientId={c.id}
-                  onOpenClient={onOpenClient}
-                />
-              ))}
-            </div>
-          )}
+          {/* Seção de Mapas Astrais Gerados (paginada: 5 por página para evitar múltiplas requisições simultâneas) */}
+          <PesquisaClientesChartsList
+            readyClients={readyClients}
+            formattedDateSelection={formattedDateSelection}
+            onOpenClient={onOpenClient}
+          />
 
           {/* Aviso quando ainda houver cadastros pendentes sem mapa gerado */}
           {pendingClients.length > 0 && (

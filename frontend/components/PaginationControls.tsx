@@ -36,7 +36,7 @@ export default function PaginationControls({
       <div style={{ color: "#8b87b8" }}>
         Exibindo <span className="font-semibold text-white">{startIndex}</span> a{" "}
         <span className="font-semibold text-white">{endIndex}</span> de{" "}
-        <span className="font-semibold text-white">{totalItems}</span> {itemName} (20 por página)
+        <span className="font-semibold text-white">{totalItems}</span> {itemName} ({pageSize} por página)
       </div>
 
       <div className="flex items-center gap-2">

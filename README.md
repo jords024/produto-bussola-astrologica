@@ -1,4 +1,4 @@
-# 🧭 Bússola Astrológica (`v1.0.12`)
+# 🧭 Bússola Astrológica (`v1.0.13`)
 
 Plataforma SaaS completa de astrologia e autoconhecimento com cálculo astronômico preciso, geração automatizada de mandalas SVG interativas com zoom/pan, relatórios em PDF, podcast cósmico com IA, área exclusiva de membros e painel de gestão com backup automático na nuvem.
 
@@ -16,8 +16,8 @@ Plataforma SaaS completa de astrologia e autoconhecimento com cálculo astronôm
 - **Painel Administrativo Completo:**
   - **Login Cósmico Premium:** Tela em 2 colunas com formulário glassmorphism, exibição/ocultação de senha e vitrine visual da Bússola Astrológica.
   - **Barra Lateral Categorizada:** Divisão intuitiva em "Painel de Gestão" (Pesquisa de Clientes e Financeiro) e "Segurança" (Backup Automático, Sistema de Logs, Gestão de Usuários e Modelos de IA) com perfil do usuário logado.
-  - **Pesquisa e Geração de Mapas:** Listagem permanente de todos os clientes cadastrados com seletor de data de referência para geração rápida em lote.
-  - **Gestão de Usuários e Convites:** Controle de acessos por papéis (`super_admin`, `admin`, `client`, `internal_client` — Aluno Interno), métricas separadas entre Alunos Registrados e Alunos Internos, filtro por data de criação e ordenação (mais recentes/antigos), limites configuráveis de Leituras do Dia com IA (diário, máximo total e modo franquia inicial → diário com reset à meia-noite de Brasília, via painel e `X-API-Key`), popups organizados em abas, criação manual direta com DDI e senha forte, convites com verificação de código por e-mail (Brevo) e exclusão em lote segura.
+  - **Pesquisa e Geração de Mapas:** Listagem paginada (5 mapas por página) dos clientes cadastrados com seletor de data de referência para geração rápida em lote.
+  - **Gestão de Usuários e Convites:** Controle de acessos por papéis (`super_admin`, `admin`, `client`, `internal_client` — Aluno Interno), métricas separadas entre Alunos Registrados e Alunos Internos, filtro por data de criação e ordenação (mais recentes/antigos), exibição de leituras realizadas/restantes e edição em lote de limites de IA (`PUT /admin/users/batch-limits`), limites configuráveis (diário, máximo total e modo franquia inicial → diário com reset à meia-noite de Brasília), permissão de múltiplos perfis diretamente na criação de convites via `POST /admin/invites` (`X-API-Key`), popups organizados em abas, criação manual direta com DDI e senha forte, convites com verificação de código por e-mail (Brevo) e exclusão em lote segura.
   - **Financeiro (Consumo de IA):** Painel exclusivo para administradores consolidando gastos de OpenAI (Mapas Astrais + Leituras do Dia) com agregação SQL otimizada (`GROUP BY` sem trafegar SVG), filtros de período no fuso de Brasília (`America/Sao_Paulo`), ordenação padrão por atividade mais recente, popup centralizado de carregamento ao ordenar/filtrar, seleção individual ou em lote ("Selecionar todos"), popup de resumo acumulado (leituras, tokens, USD e BRL) e filtro por datas com contagem diária de leituras no modal do aluno.
   - **PWA Mobile/Tablet & Convites Inteligentes:** Atalho instalável na tela inicial exclusivo para celular e tablet (banner + botão no menu mobile com guia para iOS/Android) e redirecionamento automático para `/admin` ou `/login` ao abrir links de convite já utilizados ou com sessão ativa.
   - **Backups Automáticos & Logs:** Rotinas de backup do PostgreSQL com upload para a nuvem (Backblaze B2/S3), restauração com um clique e monitoramento de logs dos contêineres Docker em tempo real.
@@ -30,7 +30,7 @@ Plataforma SaaS completa de astrologia e autoconhecimento com cálculo astronôm
 - **Framework:** Next.js 14 (App Router)
 - **Linguagem:** TypeScript
 - **Estilização:** Tailwind CSS (tema Glassmorphism & Neon)
-- **Testes Unitários:** Vitest & React Testing Library (220 testes unitários - 100% aprovados)
+- **Testes Unitários:** Vitest & React Testing Library (224 testes unitários - 100% aprovados)
 
 ### Backend
 - **Framework:** FastAPI / Python 3.11
