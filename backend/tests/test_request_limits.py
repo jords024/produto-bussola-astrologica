@@ -436,3 +436,107 @@ def test_batch_update_user_request_limits():
             db.query(User).filter(User.id.in_(created_ids)).delete(synchronize_session=False)
             db.commit()
         db.close()
+
+
+def test_batch_update_access_and_multiple_profiles():
+    token = get_admin_token()
+    tag = uuid.uuid4().hex[:8]
+    db = SessionLocal()
+    created_ids = []
+    try:
+        u1 = User(
+            id=str(uuid.uuid4()),
+            name="Aluno Acesso 1",
+            email=f"batch_acc_1_{tag}@teste.com",
+            password_hash=hash_password("SenhaForte@123"),
+            role="client",
+            is_active=True,
+        )
+        u2 = User(
+            id=str(uuid.uuid4()),
+            name="Aluno Interno Acesso 2",
+            email=f"batch_acc_2_{tag}@teste.com",
+            password_hash=hash_password("SenhaForte@123"),
+            role="internal_client",
+            is_active=True,
+        )
+        u_admin = User(
+            id=str(uuid.uuid4()),
+            name="Admin Acesso Ignorado",
+            email=f"batch_acc_adm_{tag}@teste.com",
+            password_hash=hash_password("SenhaForte@123"),
+            role="admin",
+            is_active=True,
+        )
+        db.add_all([u1, u2, u_admin])
+        db.commit()
+        created_ids = [str(u1.id), str(u2.id), str(u_admin.id)]
+
+        # Sem IDs -> 400
+        res_empty = client.put(
+            "/admin/users/batch-access-profiles",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"ids": [], "update_access": True, "access_days": 30},
+        )
+        assert res_empty.status_code == 400
+
+        # Nenhuma opção marcada -> 400
+        res_no_opt = client.put(
+            "/admin/users/batch-access-profiles",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"ids": created_ids, "update_access": False, "update_multiple_profiles": False},
+        )
+        assert res_no_opt.status_code == 400
+
+        # Atualiza tempo de acesso (30 dias) e múltiplos perfis (máx 4)
+        res = client.put(
+            "/admin/users/batch-access-profiles",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "ids": created_ids,
+                "update_access": True,
+                "access_days": 30,
+                "update_multiple_profiles": True,
+                "allow_multiple_profiles": True,
+                "unlimited_extra_profiles": False,
+                "max_extra_profiles": 4,
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["success"] is True
+        assert data["updated_count"] == 2
+        assert data["skipped_admin_count"] == 1
+
+        db.expire_all()
+        for uid in (created_ids[0], created_ids[1]):
+            refreshed = db.query(User).filter(User.id == uid).first()
+            assert refreshed.access_expires_at is not None
+            assert refreshed.allow_multiple_profiles is True
+            assert refreshed.max_extra_profiles == 4
+
+        adm_refreshed = db.query(User).filter(User.id == created_ids[2]).first()
+        assert adm_refreshed.access_expires_at is None
+
+        # Atualiza apenas expiração para vitalício, mantendo múltiplos perfis intacto
+        res_clear = client.put(
+            "/admin/users/batch-access-profiles",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "ids": [created_ids[0]],
+                "update_access": True,
+                "clear_expiration": True,
+                "update_multiple_profiles": False,
+            },
+        )
+        assert res_clear.status_code == 200
+        db.expire_all()
+        u1_refreshed = db.query(User).filter(User.id == created_ids[0]).first()
+        assert u1_refreshed.access_expires_at is None
+        assert u1_refreshed.allow_multiple_profiles is True
+        assert u1_refreshed.max_extra_profiles == 4
+    finally:
+        if created_ids:
+            db.query(User).filter(User.id.in_(created_ids)).delete(synchronize_session=False)
+            db.commit()
+        db.close()

@@ -554,6 +554,79 @@ describe("GestaoUsuarios Component", () => {
       expect(screen.queryByTestId("batch-edit-limits-modal")).toBeNull();
     });
   });
+
+  it("permite selecionar todos os usuários de todas as páginas e editar Acesso e Perfis em lote", async () => {
+    const manyUsers = [
+      mockUsersResponse.items[0], // Super Admin (não selecionável)
+      ...Array.from({ length: 25 }, (_, i) => ({
+        id: `u-${i + 1}`,
+        name: `Aluno Lista ${i + 1}`,
+        email: `aluno${i + 1}@exemplo.com`,
+        role: "client",
+        is_active: true,
+        is_super_admin: false,
+        created_at: "2026-03-20T15:30:00Z",
+      })),
+    ];
+
+    (api.get as any).mockResolvedValueOnce({
+      total: manyUsers.length,
+      items: manyUsers,
+    });
+    (api.put as any).mockResolvedValueOnce({
+      success: true,
+      updated_count: 25,
+      skipped_admin_count: 0,
+      message: "Acesso e perfis atualizados para 25 usuário(s).",
+    });
+
+    render(<GestaoUsuarios />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("select-all-users-btn")).toBeDefined();
+    });
+
+    // Página 1 tem 19 alunos selecionáveis (Super Admin + 19 = 20 itens na pág 1)
+    fireEvent.click(screen.getByTestId("select-all-users-btn"));
+    expect(screen.getByText("19 selecionado(s)")).toBeDefined();
+
+    // Deve aparecer o botão para selecionar todos os 25 usuários (todas as páginas)
+    const selectAllAcrossBtn = screen.getByTestId("select-all-across-pages-btn");
+    expect(selectAllAcrossBtn.textContent).toContain("Selecionar todos os 25 usuários");
+    fireEvent.click(selectAllAcrossBtn);
+
+    expect(screen.getByText("25 selecionado(s)")).toBeDefined();
+    expect(screen.getByTestId("all-users-selected-badge").textContent).toContain(
+      "Todos os 25 usuários selecionados"
+    );
+
+    // Abre o modal de edição em lote de Acesso e Perfis
+    fireEvent.click(screen.getByTestId("batch-edit-access-profiles-btn"));
+    expect(screen.getByTestId("batch-edit-access-modal")).toBeDefined();
+
+    fireEvent.click(screen.getByTestId("access-preset-30"));
+    fireEvent.click(screen.getByTestId("toggle-allow-multiple-profiles"));
+    fireEvent.click(screen.getByTestId("limit-mode-capped"));
+    fireEvent.change(screen.getByTestId("max-extra-profiles-input"), { target: { value: "3" } });
+
+    fireEvent.click(screen.getByTestId("batch-edit-access-submit-btn"));
+
+    await waitFor(() => {
+      expect(api.put).toHaveBeenCalledWith("/admin/users/batch-access-profiles", {
+        ids: Array.from({ length: 25 }, (_, i) => `u-${i + 1}`),
+        update_access: true,
+        access_days: 30,
+        update_multiple_profiles: true,
+        allow_multiple_profiles: true,
+        unlimited_extra_profiles: false,
+        max_extra_profiles: 3,
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("batch-edit-access-modal")).toBeNull();
+    });
+  });
 });
 
 

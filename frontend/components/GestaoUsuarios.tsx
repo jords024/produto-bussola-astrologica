@@ -14,6 +14,8 @@ import UsuarioCard from "@/components/UsuarioCard";
 import RedefinirSenhaModal from "@/components/RedefinirSenhaModal";
 import UsersFilterBar, { UserSortOrder } from "@/components/UsersFilterBar";
 import BatchEditLimitsModal from "@/components/BatchEditLimitsModal";
+import UsersBatchActionsBar from "@/components/UsersBatchActionsBar";
+import BatchEditAccessProfilesModal from "@/components/BatchEditAccessProfilesModal";
 
 export interface PanelUser {
   id: string;
@@ -53,6 +55,7 @@ export default function GestaoUsuarios() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false);
   const [showBatchLimitsModal, setShowBatchLimitsModal] = useState(false);
+  const [showBatchAccessProfilesModal, setShowBatchAccessProfilesModal] = useState(false);
   const [batchDeleteLoading, setBatchDeleteLoading] = useState(false);
   const [userToDelete, setUserToDelete] = useState<PanelUser | null>(null);
   const [singleUserDeleteLoading, setSingleUserDeleteLoading] = useState(false);
@@ -151,9 +154,13 @@ export default function GestaoUsuarios() {
   const pagedUsers = users.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const selectableInPage = pagedUsers.filter((u) => !u.is_super_admin && !u.is_current_user);
+  const allSelectableUsers = users.filter((u) => !u.is_super_admin && !u.is_current_user);
   const isAllSelectedInPage =
     selectableInPage.length > 0 &&
     selectableInPage.every((u) => selectedUserIds.includes(u.id));
+  const isAllSelectedAcrossAll =
+    allSelectableUsers.length > 0 &&
+    allSelectableUsers.every((u) => selectedUserIds.includes(u.id));
 
   const toggleSelectAllInPage = () => {
     if (isAllSelectedInPage) {
@@ -162,6 +169,10 @@ export default function GestaoUsuarios() {
       const toAdd = selectableInPage.map((u) => u.id).filter((id) => !selectedUserIds.includes(id));
       setSelectedUserIds((prev) => [...prev, ...toAdd]);
     }
+  };
+
+  const selectAllAcrossAll = () => {
+    setSelectedUserIds(allSelectableUsers.map((u) => u.id));
   };
 
   const toggleSelectOne = (id: string) => {
@@ -347,56 +358,19 @@ export default function GestaoUsuarios() {
 
       {/* Barra de Ações em Massa (Usuários) */}
       {!loading && users.length > 0 && (
-        <div
-          data-testid="users-batch-bar"
-          className="p-3 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs"
-          style={{ background: "#1a1535", border: "1px solid rgba(127, 119, 221, 0.2)" }}
-        >
-          <label className="flex items-center gap-2.5 cursor-pointer font-medium select-none" style={{ color: "#f0eeff" }}>
-            <input
-              type="checkbox"
-              data-testid="select-all-users-btn"
-              checked={isAllSelectedInPage}
-              onChange={toggleSelectAllInPage}
-              className="w-4 h-4 rounded cursor-pointer accent-purple-500"
-            />
-            <span>Selecionar todos da página ({selectableInPage.length})</span>
-          </label>
-
-          {selectedUserIds.length > 0 && (
-            <div className="flex items-center gap-3">
-              <span className="font-semibold" style={{ color: "#AFA9EC" }}>
-                {selectedUserIds.length} selecionado(s)
-              </span>
-              <button
-                type="button"
-                data-testid="clear-selection-users-btn"
-                onClick={() => setSelectedUserIds([])}
-                className="px-2.5 py-1 rounded-lg text-[11px] text-gray-400 hover:text-white transition-colors cursor-pointer"
-              >
-                Limpar
-              </button>
-              <button
-                type="button"
-                data-testid="batch-edit-limits-btn"
-                onClick={() => setShowBatchLimitsModal(true)}
-                className="px-3.5 py-1.5 rounded-xl font-bold bg-[#7F77DD]/25 text-[#d6d3ff] border border-[#7F77DD]/45 hover:bg-[#7F77DD]/35 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-lg shadow-[#7F77DD]/10"
-              >
-                <span>⚡</span>
-                <span>Editar Limites de IA</span>
-              </button>
-              <button
-                type="button"
-                data-testid="batch-delete-users-btn"
-                onClick={() => setShowBatchDeleteModal(true)}
-                className="px-3.5 py-1.5 rounded-xl font-bold bg-rose-500/20 text-rose-300 border border-rose-500/35 hover:bg-rose-500/30 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-lg shadow-rose-500/10"
-              >
-                <span>🗑️</span>
-                <span>Excluir Selecionados</span>
-              </button>
-            </div>
-          )}
-        </div>
+        <UsersBatchActionsBar
+          selectableInPageCount={selectableInPage.length}
+          totalSelectableCount={allSelectableUsers.length}
+          selectedCount={selectedUserIds.length}
+          isAllSelectedInPage={isAllSelectedInPage}
+          isAllSelectedAcrossAll={isAllSelectedAcrossAll}
+          onToggleSelectAllInPage={toggleSelectAllInPage}
+          onSelectAllAcrossAll={selectAllAcrossAll}
+          onClearSelection={() => setSelectedUserIds([])}
+          onOpenBatchAccessProfiles={() => setShowBatchAccessProfilesModal(true)}
+          onOpenBatchLimits={() => setShowBatchLimitsModal(true)}
+          onOpenBatchDelete={() => setShowBatchDeleteModal(true)}
+        />
       )}
 
       {/* Listagem de Usuários */}
@@ -499,6 +473,14 @@ export default function GestaoUsuarios() {
         isOpen={showBatchLimitsModal}
         selectedUserIds={selectedUserIds}
         onClose={() => setShowBatchLimitsModal(false)}
+        onUpdated={() => { setSelectedUserIds([]); fetchUsers(); }}
+      />
+
+      {/* Modal de Edição de Acesso e Perfis em Lote */}
+      <BatchEditAccessProfilesModal
+        isOpen={showBatchAccessProfilesModal}
+        selectedUserIds={selectedUserIds}
+        onClose={() => setShowBatchAccessProfilesModal(false)}
         onUpdated={() => { setSelectedUserIds([]); fetchUsers(); }}
       />
     </div>

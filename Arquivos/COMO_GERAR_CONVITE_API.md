@@ -46,6 +46,8 @@ Para gerar um convite que **NÃO EXPIRA**, envie os seguintes dados:
 | `daily_request_limit` | `integer \| null` | `null` ou `>= 1` | *(Opcional)* Limite diário de novas Leituras do Dia com IA (`null` = ilimitado). Reset à meia-noite (Brasília). |
 | `max_total_requests` | `integer \| null` | `null` ou `>= 1` | *(Opcional)* Limite máximo total (ou franquia inicial livre no modo `quota_then_daily`) de novas Leituras do Dia com IA (`null` = ilimitado). |
 | `request_limit_mode` | `string` | `"strict"` ou `"quota_then_daily"` | *(Opcional, padrão `"strict"`)* `"strict"` bloqueia ao atingir o total; `"quota_then_daily"` libera uso livre até atingir `max_total_requests` (ex.: `100`) e depois aplica `daily_request_limit` por dia (ex.: `3`). |
+| `allow_multiple_profiles` | `boolean` | `true` ou `false` | *(Opcional, padrão `false`)* Quando `true`, libera o aluno a cadastrar múltiplas pessoas (perfis extras) na conta. |
+| `max_extra_profiles` | `integer \| null` | `null` ou `>= 1` | *(Opcional, padrão `null`)* Máximo de perfis extras permitidos quando `allow_multiple_profiles: true` (`null` = ilimitado). |
 
 ---
 
@@ -61,6 +63,12 @@ Ao realizar a requisição com sucesso (HTTP `200 OK`), a API retorna:
   "role_label": "Aluno",
   "validity_type": "never",
   "expires_at": null,
+  "access_days": 365,
+  "daily_request_limit": 5,
+  "max_total_requests": 300,
+  "request_limit_mode": "quota_then_daily",
+  "allow_multiple_profiles": true,
+  "max_extra_profiles": 5,
   "created_at": "2026-10-15T23:00:00Z",
   "invite_path": "/cadastro?token=4vK9L_8xYzQ1mNoP2rStUvWxYz0123456789abcde",
   "invite_url": "https://bussolaastrologica.com.br/cadastro?token=4vK9L_8xYzQ1mNoP2rStUvWxYz0123456789abcde"
@@ -82,6 +90,23 @@ curl -X POST "http://localhost:8005/admin/invites" \
   -d '{
     "role": "client",
     "validity_type": "never"
+  }'
+```
+
+### Exemplo 1.1: cURL Completo (Limites de IA + Múltiplos Perfis)
+```bash
+curl -X POST "https://SUA_API/admin/invites" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: <SUA_EXTERNAL_API_KEY>" \
+  -d '{
+    "role": "client",
+    "validity_type": "never",
+    "access_days": 365,
+    "request_limit_mode": "quota_then_daily",
+    "max_total_requests": 300,
+    "daily_request_limit": 5,
+    "allow_multiple_profiles": true,
+    "max_extra_profiles": 5
   }'
 ```
 
@@ -181,13 +206,17 @@ Você também pode configurar ou alterar o limite diário e o limite máximo tot
   ```json
   {
     "email": "aluno@exemplo.com",
-    "daily_request_limit": null,
-    "max_total_requests": null
+    "unlimited_total_requests": true,
+    "unlimited_daily_requests": true
   }
   ```
-  *(Dica: você pode enviar apenas um dos campos para atualizar somente ele sem alterar o outro, ou passar `user_id` no lugar de `email`.)*
+  *(Também aceita `"daily_request_limit": null` e `"max_total_requests": null`, além dos campos opcionais `"ai_model_max_limit"` e `"ai_model_daily_limit"` — use `null` neles para seguir o padrão global. Você pode enviar apenas os campos que deseja alterar, ou passar `"user_id"` no lugar de `"email"`.)*
 
 ### Consultar limites e uso atual do aluno
 * **Método:** `GET`
 * **URL:** `https://api.bussolaastrologica.com.br/admin/users/limits?email=aluno@exemplo.com`
-* **Header:** `X-API-Key: bussola_ext_sec_8f93a1c4e72b0d59`
+* **Header:** `X-API-Key: <SUA_EXTERNAL_API_KEY>`
+* **Retorno:** inclui os limites configurados (`request_limit_mode`, `max_total_requests`, `daily_request_limit`), o consumo realizado (`total_used` e `daily_used` no fuso de Brasília) e o modelo de IA ativo.
+
+> ⚠️ **Observação sobre múltiplos perfis em usuário já cadastrado:**
+> O envio de `allow_multiple_profiles` e `max_extra_profiles` via `X-API-Key` funciona na criação do convite (`POST /admin/invites`). Para alterar essa permissão em um usuário já existente, o endpoint atual é `PUT /admin/users/{user_id}` usando autenticação `Authorization: Bearer <TOKEN_JWT_ADMIN>`.

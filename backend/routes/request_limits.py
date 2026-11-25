@@ -23,6 +23,8 @@ from services.ai_model_config_service import (
     normalize_optional_model_id,
     resolve_reading_model_for_user,
 )
+from services.access_service import resolve_access_expires_at
+from services.profile_service import apply_multiple_profiles_config
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +107,89 @@ def batch_update_user_request_limits(
         "updated_count": updated_count,
         "skipped_admin_count": skipped_admin_count,
         "message": f"Limites de IA atualizados para {updated_count} usuário(s).",
+    }
+
+
+class BatchUpdateAccessProfilesBody(BaseModel):
+    ids: List[str]
+    update_access: bool = False
+    access_days: Optional[int] = None
+    access_expires_at: Optional[str] = None
+    clear_expiration: Optional[bool] = False
+    update_multiple_profiles: bool = False
+    allow_multiple_profiles: Optional[bool] = None
+    max_extra_profiles: Optional[int] = None
+    unlimited_extra_profiles: Optional[bool] = False
+
+
+@router.put("/batch-access-profiles")
+def batch_update_access_and_profiles(
+    body: BatchUpdateAccessProfilesBody,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Atualiza tempo de acesso e/ou permissão de múltiplos perfis para vários usuários."""
+    clean_ids = [str(uid).strip() for uid in (body.ids or []) if str(uid).strip()]
+    if not clean_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Selecione ao menos um usuário para atualizar acesso e perfis.",
+        )
+
+    if not body.update_access and not body.update_multiple_profiles:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Marque ao menos uma opção (Tempo de Acesso ou Múltiplos Perfis) para atualizar.",
+        )
+
+    super_admin_email = os.getenv("SUPER_ADMIN_EMAIL", "admin@bussola.com").strip().lower()
+    targets = db.query(User).filter(User.id.in_(clean_ids)).all()
+    if not targets:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Nenhum usuário encontrado para os IDs informados.",
+        )
+
+    updated_count = 0
+    skipped_admin_count = 0
+
+    for target in targets:
+        is_super = (target.email or "").strip().lower() == super_admin_email
+        if is_super or target.role == "admin":
+            skipped_admin_count += 1
+            continue
+
+        if body.update_access:
+            if body.clear_expiration:
+                target.access_expires_at = None
+            else:
+                target.access_expires_at = resolve_access_expires_at(
+                    target.role, body.access_days, body.access_expires_at
+                )
+
+        if body.update_multiple_profiles:
+            apply_multiple_profiles_config(
+                user=target,
+                role=target.role,
+                allow_multiple=body.allow_multiple_profiles,
+                max_extra=body.max_extra_profiles,
+                unlimited=bool(body.unlimited_extra_profiles),
+            )
+
+        updated_count += 1
+
+    db.commit()
+    logger.info(
+        f"Acesso e perfis em lote atualizados por '{current_user.email}': "
+        f"atualizados={updated_count}, ignorados_admin={skipped_admin_count}, "
+        f"update_access={body.update_access}, update_multiple_profiles={body.update_multiple_profiles}"
+    )
+
+    return {
+        "success": True,
+        "updated_count": updated_count,
+        "skipped_admin_count": skipped_admin_count,
+        "message": f"Acesso e perfis atualizados para {updated_count} usuário(s).",
     }
 
 
