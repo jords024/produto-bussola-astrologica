@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import uuid
 from datetime import date, datetime, time as dtime
 from typing import List, Optional
@@ -149,11 +150,13 @@ def list_member_profiles(
     )
     used = len(profiles)
     remaining = None if (can_create and max_limit is None) else (max(0, max_limit - used) if can_create and max_limit is not None else 0)
+    upsell_url = (os.getenv("MULTI_PROFILES_UPSELL_URL") or "").strip() or None
     return {
         "allow_multiple_profiles": can_create,
         "max_extra_profiles": max_limit,
         "used_extra_profiles": used,
         "remaining_extra_profiles": remaining,
+        "upsell_url": None if can_create else upsell_url,
         "profiles": [serialize_profile(p) for p in profiles],
     }
 

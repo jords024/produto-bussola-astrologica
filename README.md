@@ -1,4 +1,4 @@
-# 🧭 Bússola Astrológica (`v1.0.14`)
+# 🧭 Bússola Astrológica (`v1.0.15`)
 
 Plataforma SaaS completa de astrologia e autoconhecimento com cálculo astronômico preciso, geração automatizada de mandalas SVG interativas com zoom/pan, relatórios em PDF, podcast cósmico com IA, área exclusiva de membros e painel de gestão com backup automático na nuvem.
 
@@ -9,7 +9,8 @@ Plataforma SaaS completa de astrologia e autoconhecimento com cálculo astronôm
 - **Análise do Dia (trânsitos):** A pessoa escolhe qualquer data e recebe onde os cinco planetas rápidos (Lua, Sol, Mercúrio, Vênus, Marte) estão passando nas casas do **mapa dela**, o que cada posição abre, até quando dura e uma síntese costurando as cinco numa leitura só. Cada data fica guardada e o histórico reabre sem recalcular.
 - **Diário de Bordo Inteligente:** Histórico unificado com paginação elegante de até 20 itens por página, atualização automática ao gerar novas análises e filtros rápidos.
 - **Segurança & Sanitização de Entradas:** Sanitização rigorosa tanto no Frontend quanto no Backend contra injeções de HTML, templates e comandos indesejados nas perguntas do aluno.
-- **API Externa de Convites Permanentes:** Endpoint seguro via `X-API-Key` para emissão automatizada de links de convites completos e sem expiração por plataformas externas.
+- **API Externa de Convites & Upgrades:** Endpoints autenticados via `X-API-Key` para emissão automatizada de links (`POST /admin/invites`), consulta por token (`GET /admin/invites/{token}`) e atualização/upgrade de convites ou contas já criadas (`PATCH`/`PUT /admin/invites/{token}`) via `used_by_id` com proteção `upgrade_only` contra ordem invertida de webhooks.
+- **Múltiplos Perfis & Banner de Upsell:** Suporte a cadastro e leitura para terceiros com banner configurável via `MULTI_PROFILES_UPSELL_URL` nas telas de "A Leitura do Dia" e "Coleta de Informações" (oculto automaticamente quando o recurso está liberado ou quando a variável não está definida).
 - **Cálculo Astronômico Preciso:** Posicionamento de planetas, cúspides de casas e aspectos utilizando astronomia real (`kerykeion`, `pyswisseph`).
 - **Mandala Astrológica Interativa:** Renderização SVG em alta definição, controles de tela cheia (100vw x 100vh), zoom in/out via botões e scroll do mouse, e navegação por arraste.
 - **Relatórios Cósmicos em PDF:** Exportação de mapa astral e interpretações aprofundadas.
@@ -30,7 +31,7 @@ Plataforma SaaS completa de astrologia e autoconhecimento com cálculo astronôm
 - **Framework:** Next.js 14 (App Router)
 - **Linguagem:** TypeScript
 - **Estilização:** Tailwind CSS (tema Glassmorphism & Neon)
-- **Testes Unitários:** Vitest & React Testing Library (225 testes unitários - 100% aprovados)
+- **Testes Unitários:** Vitest & React Testing Library (227 testes unitários - 100% aprovados)
 
 ### Backend
 - **Framework:** FastAPI / Python 3.11

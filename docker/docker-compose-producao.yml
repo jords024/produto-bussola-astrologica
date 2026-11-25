@@ -36,6 +36,7 @@ services:
       - DASHBOARD_URL=${DASHBOARD_URL:-https://${FRONTEND_DOMAIN:-bussola.seudominio.com}}
       - FRONTEND_DOMAIN=${FRONTEND_DOMAIN:-bussola.seudominio.com}
       - API_DOMAIN=${API_DOMAIN:-api-bussola.seudominio.com}
+      - MULTI_PROFILES_UPSELL_URL=${MULTI_PROFILES_UPSELL_URL:-}
 
       #########################################################
       # Configuração do Banco de Dados (PostgreSQL Externo) ##

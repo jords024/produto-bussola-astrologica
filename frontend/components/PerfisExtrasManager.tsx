@@ -9,12 +9,14 @@ import BrazilStateSelect from "@/components/BrazilStateSelect";
 import { CityOption, COUNTRIES } from "@/lib/locationConstants";
 import type { AstroProfileItem } from "@/components/AstroProfileSelector";
 import GeneratingChartModal from "@/components/GeneratingChartModal";
+import MultiProfilesUpsellBanner from "@/components/MultiProfilesUpsellBanner";
 
 interface ProfilesResponse {
   allow_multiple_profiles: boolean;
   max_extra_profiles: number | null;
   used_extra_profiles: number;
   remaining_extra_profiles: number | null;
+  upsell_url?: string | null;
   profiles: AstroProfileItem[];
 }
 
@@ -62,8 +64,12 @@ export default function PerfisExtrasManager({ onProfilesUpdated }: PerfisExtrasM
     loadProfiles();
   }, [loadProfiles]);
 
-  if (!data || (!data.allow_multiple_profiles && data.profiles.length === 0)) {
+  if (!data) {
     return null;
+  }
+
+  if (!data.allow_multiple_profiles && data.profiles.length === 0) {
+    return data.upsell_url ? <MultiProfilesUpsellBanner url={data.upsell_url} variant="card" /> : null;
   }
 
   const limitReached =

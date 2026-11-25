@@ -175,4 +175,97 @@ describe("Múltiplos Perfis (Admin & Aluno)", () => {
       expect(api.delete).toHaveBeenCalledWith("/members/profiles/p1");
     });
   });
+
+  it("AstroProfileSelector exibe o banner de upsell apenas quando showUpsellBanner=true, recurso desativado e upsell_url preenchida", async () => {
+    (api.get as any).mockResolvedValue({
+      allow_multiple_profiles: false,
+      upsell_url: "https://pay.hotmart.com/multi-perfis",
+      profiles: [],
+    });
+
+    // Sem showUpsellBanner (ex: Minha Bússola) -> não renderiza banner
+    const { rerender } = render(
+      <AstroProfileSelector ownerName="Aryaraj" selectedProfileId="" onChange={vi.fn()} />
+    );
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/members/profiles");
+    });
+    expect(screen.queryByTestId("multi-profiles-upsell-banner")).toBeNull();
+
+    // Com showUpsellBanner (A Leitura do Dia) -> renderiza banner com link exato
+    rerender(
+      <AstroProfileSelector ownerName="Aryaraj" selectedProfileId="" onChange={vi.fn()} showUpsellBanner />
+    );
+    const banner = await screen.findByTestId("multi-profiles-upsell-banner");
+    expect(banner.getAttribute("href")).toBe("https://pay.hotmart.com/multi-perfis");
+
+    // Quando múltiplos perfis é ativado -> banner some automaticamente
+    (api.get as any).mockResolvedValue({
+      allow_multiple_profiles: true,
+      upsell_url: null,
+      profiles: [],
+    });
+    rerender(
+      <AstroProfileSelector
+        ownerName="Aryaraj"
+        selectedProfileId=""
+        onChange={vi.fn()}
+        refreshKey={1}
+        showUpsellBanner
+      />
+    );
+    await waitFor(() => {
+      expect(screen.queryByTestId("multi-profiles-upsell-banner")).toBeNull();
+    });
+
+    // Quando upsell_url está vazio -> banner não aparece
+    (api.get as any).mockResolvedValue({
+      allow_multiple_profiles: false,
+      upsell_url: "",
+      profiles: [],
+    });
+    rerender(
+      <AstroProfileSelector
+        ownerName="Aryaraj"
+        selectedProfileId=""
+        onChange={vi.fn()}
+        refreshKey={2}
+        showUpsellBanner
+      />
+    );
+    await waitFor(() => {
+      expect(screen.queryByTestId("multi-profiles-upsell-banner")).toBeNull();
+    });
+  });
+
+  it("PerfisExtrasManager exibe o banner de upsell em Coleta de Informações quando desativado e oculta quando ativo ou sem URL", async () => {
+    (api.get as any).mockResolvedValueOnce({
+      allow_multiple_profiles: false,
+      max_extra_profiles: null,
+      used_extra_profiles: 0,
+      remaining_extra_profiles: 0,
+      upsell_url: "https://pay.hotmart.com/coleta-perfis",
+      profiles: [],
+    });
+
+    const { unmount } = render(<PerfisExtrasManager />);
+    const banner = await screen.findByTestId("multi-profiles-upsell-banner");
+    expect(banner.getAttribute("href")).toBe("https://pay.hotmart.com/coleta-perfis");
+    unmount();
+
+    // Sem URL -> não renderiza banner
+    (api.get as any).mockResolvedValueOnce({
+      allow_multiple_profiles: false,
+      max_extra_profiles: null,
+      used_extra_profiles: 0,
+      remaining_extra_profiles: 0,
+      upsell_url: null,
+      profiles: [],
+    });
+    render(<PerfisExtrasManager />);
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByTestId("multi-profiles-upsell-banner")).toBeNull();
+  });
 });

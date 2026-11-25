@@ -14,6 +14,14 @@ from models.models import User, UserInvite, RegistrationVerification
 from routes.auth import require_admin, get_admin_or_api_key, hash_password, create_token, JWT_SECRET, JWT_ALGORITHM
 from services.brevo_service import send_brevo_verification_code, send_brevo_verification_link
 from services.request_limit_service import validate_optional_limit, normalize_limit_mode
+from services.invite_upgrade_service import (
+    get_invite_url,
+    merge_benefit_limit,
+    merge_limit_mode,
+    merge_multiple_profiles,
+    merge_user_access_expires_at,
+    serialize_invite_status,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -183,6 +191,191 @@ def list_invites(
         })
 
     return {"items": items, "total": len(items)}
+
+
+class UpdateInviteRequest(BaseModel):
+    allow_multiple_profiles: Optional[bool] = None
+    max_extra_profiles: Optional[int] = None
+    access_days: Optional[int] = None
+    request_limit_mode: Optional[str] = None
+    max_total_requests: Optional[int] = None
+    daily_request_limit: Optional[int] = None
+    email: Optional[str] = None
+    upgrade_only: bool = False
+
+
+@router.get("/admin/invites/{token}")
+def get_invite_by_token(
+    token: str,
+    current_user: User = Depends(get_admin_or_api_key),
+    db: Session = Depends(get_db),
+):
+    """Consulta o status e as permissões de um convite específico pelo token."""
+    invite = db.query(UserInvite).filter(UserInvite.token == token).first()
+    if not invite:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Convite não encontrado.",
+        )
+    return serialize_invite_status(invite)
+
+
+@router.patch("/admin/invites/{token}")
+@router.put("/admin/invites/{token}")
+def update_invite_by_token(
+    token: str,
+    body: UpdateInviteRequest,
+    current_user: User = Depends(get_admin_or_api_key),
+    db: Session = Depends(get_db),
+):
+    """
+    Atualiza permissões e limites de um convite pelo token (cenários de Order Bump / Upsell).
+    Se o convite já foi utilizado, aplica diretamente na conta do usuário via used_by_id
+    (com fallback em email) e mantém o convite sincronizado.
+    """
+    invite = db.query(UserInvite).filter(UserInvite.token == token).first()
+    if not invite:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Convite não encontrado.",
+        )
+
+    provided = set(body.model_fields_set)
+    validated_max_extra = (
+        validate_optional_limit(body.max_extra_profiles, "Limite de perfis extras")
+        if "max_extra_profiles" in provided
+        else None
+    )
+    validated_access_days = (
+        validate_optional_limit(body.access_days, "Dias de acesso")
+        if "access_days" in provided
+        else None
+    )
+    validated_max_total = (
+        validate_optional_limit(body.max_total_requests, "Limite máximo total")
+        if "max_total_requests" in provided
+        else None
+    )
+    validated_daily = (
+        validate_optional_limit(body.daily_request_limit, "Limite diário")
+        if "daily_request_limit" in provided
+        else None
+    )
+    validated_mode = (
+        normalize_limit_mode(body.request_limit_mode)
+        if ("request_limit_mode" in provided and body.request_limit_mode is not None)
+        else None
+    )
+
+    target_user: Optional[User] = None
+    if invite.is_used:
+        if invite.used_by_id:
+            target_user = db.query(User).filter(User.id == invite.used_by_id).first()
+        if not target_user and body.email and body.email.strip():
+            clean_email = body.email.strip().lower()
+            target_user = db.query(User).filter(func.lower(User.email) == clean_email).first()
+
+    applied_to = "user" if target_user else "invite"
+
+    if invite.role != "admin":
+        if target_user and target_user.role != "admin":
+            next_allow, next_max_extra = merge_multiple_profiles(
+                bool(target_user.allow_multiple_profiles),
+                target_user.max_extra_profiles,
+                provided,
+                body.allow_multiple_profiles,
+                validated_max_extra,
+                body.upgrade_only,
+            )
+            target_user.allow_multiple_profiles = next_allow
+            target_user.max_extra_profiles = next_max_extra
+
+            if "access_days" in provided:
+                target_user.access_expires_at = merge_user_access_expires_at(
+                    target_user.access_expires_at, validated_access_days, body.upgrade_only
+                )
+                invite.access_days = merge_benefit_limit(
+                    invite.access_days, validated_access_days, body.upgrade_only
+                )
+            if "max_total_requests" in provided:
+                target_user.max_total_requests = merge_benefit_limit(
+                    target_user.max_total_requests, validated_max_total, body.upgrade_only
+                )
+            if "daily_request_limit" in provided:
+                target_user.daily_request_limit = merge_benefit_limit(
+                    target_user.daily_request_limit, validated_daily, body.upgrade_only
+                )
+            if validated_mode is not None:
+                target_user.request_limit_mode = merge_limit_mode(
+                    target_user.request_limit_mode, validated_mode, body.upgrade_only
+                )
+
+            invite.allow_multiple_profiles = bool(target_user.allow_multiple_profiles)
+            invite.max_extra_profiles = target_user.max_extra_profiles
+            invite.request_limit_mode = target_user.request_limit_mode or "strict"
+            invite.max_total_requests = target_user.max_total_requests
+            invite.daily_request_limit = target_user.daily_request_limit
+        elif not target_user:
+            next_allow, next_max_extra = merge_multiple_profiles(
+                bool(invite.allow_multiple_profiles),
+                invite.max_extra_profiles,
+                provided,
+                body.allow_multiple_profiles,
+                validated_max_extra,
+                body.upgrade_only,
+            )
+            invite.allow_multiple_profiles = next_allow
+            invite.max_extra_profiles = next_max_extra
+
+            if "access_days" in provided:
+                invite.access_days = merge_benefit_limit(
+                    invite.access_days, validated_access_days, body.upgrade_only
+                )
+            if "max_total_requests" in provided:
+                invite.max_total_requests = merge_benefit_limit(
+                    invite.max_total_requests, validated_max_total, body.upgrade_only
+                )
+            if "daily_request_limit" in provided:
+                invite.daily_request_limit = merge_benefit_limit(
+                    invite.daily_request_limit, validated_daily, body.upgrade_only
+                )
+            if validated_mode is not None:
+                invite.request_limit_mode = merge_limit_mode(
+                    invite.request_limit_mode, validated_mode, body.upgrade_only
+                )
+
+    db.commit()
+    db.refresh(invite)
+    if target_user:
+        db.refresh(target_user)
+
+    logger.info(
+        f"Convite '{token[:10]}...' atualizado por '{current_user.email}' | "
+        f"applied_to={applied_to} | upgrade_only={body.upgrade_only} | "
+        f"multi={invite.allow_multiple_profiles} ({invite.max_extra_profiles})"
+    )
+
+    _, invite_url = get_invite_url(invite.token)
+    response_payload = {
+        "token": invite.token,
+        "invite_url": invite_url,
+        "is_used": bool(invite.is_used),
+        "used_by_id": str(invite.used_by_id) if invite.used_by_id else None,
+        "applied_to": applied_to,
+        "allow_multiple_profiles": bool(invite.allow_multiple_profiles),
+        "max_extra_profiles": invite.max_extra_profiles,
+        "access_days": invite.access_days,
+        "request_limit_mode": invite.request_limit_mode or "strict",
+        "max_total_requests": invite.max_total_requests,
+        "daily_request_limit": invite.daily_request_limit,
+    }
+    if target_user:
+        response_payload["access_expires_at"] = (
+            target_user.access_expires_at.isoformat() + "Z"
+            if target_user.access_expires_at
+            else None
+        )
+    return response_payload
 
 
 @router.get("/auth/invite/{token}")

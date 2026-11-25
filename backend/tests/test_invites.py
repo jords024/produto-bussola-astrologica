@@ -490,3 +490,348 @@ def test_invite_with_allow_multiple_profiles_via_api_key(monkeypatch):
         db.close()
 
 
+def test_get_invite_status_by_token_active_used_and_404(monkeypatch):
+    seed_admin()
+    monkeypatch.setenv("EXTERNAL_API_KEY", "test_get_invite_key_123")
+    headers = {"X-API-Key": "test_get_invite_key_123"}
+
+    # Token inexistente -> 404
+    res_404 = client.get("/admin/invites/token_inexistente_xyz", headers=headers)
+    assert res_404.status_code == 404
+
+    res_inv = client.post(
+        "/admin/invites",
+        headers=headers,
+        json={
+            "role": "client",
+            "validity_type": "never",
+            "access_days": 90,
+            "request_limit_mode": "quota_then_daily",
+            "max_total_requests": 100,
+            "daily_request_limit": 3,
+            "allow_multiple_profiles": True,
+            "max_extra_profiles": 4,
+        },
+    )
+    assert res_inv.status_code == 200
+    token = res_inv.json()["token"]
+
+    # Consulta convite ativo
+    res_get_active = client.get(f"/admin/invites/{token}", headers=headers)
+    assert res_get_active.status_code == 200
+    d1 = res_get_active.json()
+    assert d1["token"] == token
+    assert d1["status"] == "active"
+    assert d1["is_used"] is False
+    assert d1["used_by_id"] is None
+    assert d1["allow_multiple_profiles"] is True
+    assert d1["max_extra_profiles"] == 4
+    assert d1["access_days"] == 90
+    assert d1["request_limit_mode"] == "quota_then_daily"
+    assert d1["max_total_requests"] == 100
+    assert d1["daily_request_limit"] == 3
+    assert token in d1["invite_url"]
+
+    # Aluno se cadastra -> status deve virar "used" com used_by_id preenchido
+    email = f"get_inv_{uuid.uuid4().hex[:8]}@example.com"
+    res_reg = client.post(
+        "/auth/register-with-invite",
+        json={
+            "token": token,
+            "name": "Aluno Status Convite",
+            "email": email,
+            "password": "Sirius@2026StrongPassword",
+        },
+    )
+    assert res_reg.status_code == 200
+
+    res_get_used = client.get(f"/admin/invites/{token}", headers=headers)
+    assert res_get_used.status_code == 200
+    d2 = res_get_used.json()
+    assert d2["status"] == "used"
+    assert d2["is_used"] is True
+    assert d2["used_at"] is not None
+    assert d2["used_by_id"] is not None
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            db.query(UserInvite).filter(UserInvite.used_by_id == user.id).update(
+                {"used_by_id": None}, synchronize_session=False
+            )
+            db.delete(user)
+            db.commit()
+    finally:
+        db.close()
+
+
+def test_patch_unused_invite_updates_invite_and_applies_on_register(monkeypatch):
+    seed_admin()
+    monkeypatch.setenv("EXTERNAL_API_KEY", "test_patch_unused_key_123")
+    headers = {"X-API-Key": "test_patch_unused_key_123"}
+
+    res_inv = client.post(
+        "/admin/invites",
+        headers=headers,
+        json={
+            "role": "client",
+            "validity_type": "never",
+            "access_days": 30,
+            "max_total_requests": 100,
+            "daily_request_limit": 3,
+        },
+    )
+    assert res_inv.status_code == 200
+    token = res_inv.json()["token"]
+
+    res_patch = client.patch(
+        f"/admin/invites/{token}",
+        headers=headers,
+        json={
+            "allow_multiple_profiles": True,
+            "max_extra_profiles": 5,
+            "access_days": 365,
+            "request_limit_mode": "quota_then_daily",
+            "max_total_requests": 300,
+            "daily_request_limit": 5,
+        },
+    )
+    assert res_patch.status_code == 200
+    patched = res_patch.json()
+    assert patched["applied_to"] == "invite"
+    assert patched["is_used"] is False
+    assert patched["allow_multiple_profiles"] is True
+    assert patched["max_extra_profiles"] == 5
+    assert patched["access_days"] == 365
+    assert patched["request_limit_mode"] == "quota_then_daily"
+    assert patched["max_total_requests"] == 300
+    assert patched["daily_request_limit"] == 5
+
+    # Ao cadastrar pelo mesmo link, usuário herda todas as permissões atualizadas
+    email = f"patch_unused_{uuid.uuid4().hex[:8]}@example.com"
+    res_reg = client.post(
+        "/auth/register-with-invite",
+        json={
+            "token": token,
+            "name": "Aluno Order Bump Antes",
+            "email": email,
+            "password": "Sirius@2026StrongPassword",
+        },
+    )
+    assert res_reg.status_code == 200
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        assert user is not None
+        assert user.allow_multiple_profiles is True
+        assert user.max_extra_profiles == 5
+        assert user.request_limit_mode == "quota_then_daily"
+        assert user.max_total_requests == 300
+        assert user.daily_request_limit == 5
+        assert user.access_expires_at is not None
+    finally:
+        if user:
+            db.query(UserInvite).filter(UserInvite.used_by_id == user.id).update(
+                {"used_by_id": None}, synchronize_session=False
+            )
+            db.delete(user)
+            db.commit()
+        db.close()
+
+
+def test_patch_used_invite_updates_user_via_used_by_id_even_with_different_email(monkeypatch):
+    seed_admin()
+    monkeypatch.setenv("EXTERNAL_API_KEY", "test_patch_used_key_123")
+    headers = {"X-API-Key": "test_patch_used_key_123"}
+
+    res_inv = client.post(
+        "/admin/invites",
+        headers=headers,
+        json={
+            "role": "client",
+            "validity_type": "never",
+            "access_days": 30,
+            "max_total_requests": 100,
+            "daily_request_limit": 3,
+        },
+    )
+    token = res_inv.json()["token"]
+
+    # Aluno se cadastra com e-mail diferente do checkout da Hotmart
+    email_cadastro = f"cadastro_diff_{uuid.uuid4().hex[:8]}@example.com"
+    res_reg = client.post(
+        "/auth/register-with-invite",
+        json={
+            "token": token,
+            "name": "Aluno Email Diferente",
+            "email": email_cadastro,
+            "password": "Sirius@2026StrongPassword",
+        },
+    )
+    assert res_reg.status_code == 200
+
+    # Upsell envia o email do checkout (diferente do usado no cadastro), mas o token resolve via used_by_id
+    res_patch = client.patch(
+        f"/admin/invites/{token}",
+        headers=headers,
+        json={
+            "allow_multiple_profiles": True,
+            "max_extra_profiles": 8,
+            "access_days": 365,
+            "request_limit_mode": "quota_then_daily",
+            "max_total_requests": 400,
+            "daily_request_limit": 10,
+            "email": "outro_email_checkout@hotmart.com",
+            "upgrade_only": True,
+        },
+    )
+    assert res_patch.status_code == 200
+    data = res_patch.json()
+    assert data["applied_to"] == "user"
+    assert data["is_used"] is True
+    assert data["used_by_id"] is not None
+    assert data["allow_multiple_profiles"] is True
+    assert data["max_extra_profiles"] == 8
+    assert data["request_limit_mode"] == "quota_then_daily"
+    assert data["max_total_requests"] == 400
+    assert data["daily_request_limit"] == 10
+
+    db = SessionLocal()
+    user = None
+    user_fb = None
+    try:
+        user = db.query(User).filter(User.email == email_cadastro).first()
+        assert user is not None
+        assert str(user.id) == data["used_by_id"]
+        assert user.allow_multiple_profiles is True
+        assert user.max_extra_profiles == 8
+        assert user.request_limit_mode == "quota_then_daily"
+        assert user.max_total_requests == 400
+        assert user.daily_request_limit == 10
+
+        # Testa fallback por email quando used_by_id for nulo
+        from routes.auth import hash_password
+        email_fb = f"fallback_{uuid.uuid4().hex[:8]}@example.com"
+        user_fb = User(
+            id=str(uuid.uuid4()),
+            name="Fallback Email",
+            email=email_fb,
+            password_hash=hash_password("Sirius@2026StrongPassword"),
+            role="client",
+            is_active=True,
+        )
+        db.add(user_fb)
+        inv_fb = UserInvite(
+            token=f"fb_tok_{uuid.uuid4().hex[:10]}",
+            role="client",
+            validity_type="never",
+            is_used=True,
+            used_by_id=None,
+        )
+        db.add(inv_fb)
+        db.commit()
+
+        res_fb = client.put(
+            f"/admin/invites/{inv_fb.token}",
+            headers=headers,
+            json={"email": email_fb, "allow_multiple_profiles": True, "max_extra_profiles": 3},
+        )
+        assert res_fb.status_code == 200
+        assert res_fb.json()["applied_to"] == "user"
+        db.expire_all()
+        refreshed_fb = db.query(User).filter(User.email == email_fb).first()
+        assert refreshed_fb.allow_multiple_profiles is True
+        assert refreshed_fb.max_extra_profiles == 3
+    finally:
+        if user:
+            db.query(UserInvite).filter(UserInvite.used_by_id == user.id).update(
+                {"used_by_id": None}, synchronize_session=False
+            )
+            db.delete(user)
+        if user_fb:
+            db.delete(user_fb)
+        db.commit()
+        db.close()
+
+
+def test_patch_invite_upgrade_only_prevents_downgrade(monkeypatch):
+    seed_admin()
+    monkeypatch.setenv("EXTERNAL_API_KEY", "test_upgrade_only_key_123")
+    headers = {"X-API-Key": "test_upgrade_only_key_123"}
+
+    # Cria convite inicial com limites do plano básico antes do Order Bump
+    res_inv = client.post(
+        "/admin/invites",
+        headers=headers,
+        json={
+            "role": "client",
+            "validity_type": "never",
+            "access_days": 30,
+            "max_total_requests": 100,
+            "daily_request_limit": 2,
+            "allow_multiple_profiles": False,
+        },
+    )
+    token = res_inv.json()["token"]
+
+    # 1. Order Bump chega primeiro e ativa múltiplos perfis (5) e limites altos
+    res_bump = client.patch(
+        f"/admin/invites/{token}",
+        headers=headers,
+        json={
+            "allow_multiple_profiles": True,
+            "max_extra_profiles": 5,
+            "access_days": 365,
+            "request_limit_mode": "quota_then_daily",
+            "max_total_requests": 300,
+            "daily_request_limit": 5,
+            "upgrade_only": True,
+        },
+    )
+    assert res_bump.status_code == 200
+    assert res_bump.json()["allow_multiple_profiles"] is True
+    assert res_bump.json()["max_extra_profiles"] == 5
+
+    # 2. Webhook do Produto Principal chega atrasado tentando enviar limites menores e allow=False
+    res_main_late = client.patch(
+        f"/admin/invites/{token}",
+        headers=headers,
+        json={
+            "allow_multiple_profiles": False,
+            "max_extra_profiles": 2,
+            "access_days": 30,
+            "request_limit_mode": "strict",
+            "max_total_requests": 100,
+            "daily_request_limit": 2,
+            "upgrade_only": True,
+        },
+    )
+    assert res_main_late.status_code == 200
+    d_late = res_main_late.json()
+    assert d_late["allow_multiple_profiles"] is True
+    assert d_late["max_extra_profiles"] == 5
+    assert d_late["access_days"] == 365
+    assert d_late["request_limit_mode"] == "quota_then_daily"
+    assert d_late["max_total_requests"] == 300
+    assert d_late["daily_request_limit"] == 5
+
+    # 3. Upgrade para ilimitado (None) prevalece sobre qualquer valor numérico futuro
+    res_unlim = client.patch(
+        f"/admin/invites/{token}",
+        headers=headers,
+        json={"max_total_requests": None, "upgrade_only": True},
+    )
+    assert res_unlim.status_code == 200
+    assert res_unlim.json()["max_total_requests"] is None
+
+    res_cap_after = client.patch(
+        f"/admin/invites/{token}",
+        headers=headers,
+        json={"max_total_requests": 500, "upgrade_only": True},
+    )
+    assert res_cap_after.status_code == 200
+    assert res_cap_after.json()["max_total_requests"] is None
+
+

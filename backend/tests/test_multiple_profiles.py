@@ -209,3 +209,27 @@ def test_multiple_profiles_chart_sections_and_analise_selection():
     res_hist = client.get("/members/analises", headers={"Authorization": f"Bearer {client_token}"})
     assert res_hist.status_code == 200
     assert any(item.get("profile_name") == "Maria Extra" for item in res_hist.json())
+
+
+def test_profiles_upsell_url_visibility(monkeypatch):
+    _, _, token_disabled = _create_client_user(allow_multiple=False)
+    _, _, token_enabled = _create_client_user(allow_multiple=True, max_extra=5)
+
+    # 1. Variável preenchida + múltiplos perfis desativado -> retorna upsell_url
+    monkeypatch.setenv("MULTI_PROFILES_UPSELL_URL", "https://pay.hotmart.com/upsell-perfis")
+    res_show = client.get("/members/profiles", headers={"Authorization": f"Bearer {token_disabled}"})
+    assert res_show.status_code == 200
+    assert res_show.json()["allow_multiple_profiles"] is False
+    assert res_show.json()["upsell_url"] == "https://pay.hotmart.com/upsell-perfis"
+
+    # 2. Variável preenchida + múltiplos perfis JÁ ativo -> não retorna upsell_url (None)
+    res_enabled = client.get("/members/profiles", headers={"Authorization": f"Bearer {token_enabled}"})
+    assert res_enabled.status_code == 200
+    assert res_enabled.json()["allow_multiple_profiles"] is True
+    assert res_enabled.json()["upsell_url"] is None
+
+    # 3. Variável vazia -> não retorna upsell_url (None)
+    monkeypatch.setenv("MULTI_PROFILES_UPSELL_URL", "   ")
+    res_empty = client.get("/members/profiles", headers={"Authorization": f"Bearer {token_disabled}"})
+    assert res_empty.status_code == 200
+    assert res_empty.json()["upsell_url"] is None

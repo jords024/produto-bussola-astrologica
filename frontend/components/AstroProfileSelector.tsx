@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import MultiProfilesUpsellBanner from "@/components/MultiProfilesUpsellBanner";
 
 export interface AstroProfileItem {
   id: string;
@@ -25,6 +26,7 @@ interface AstroProfileSelectorProps {
   onChange: (profileId: string, profileName?: string) => void;
   label?: string;
   refreshKey?: number;
+  showUpsellBanner?: boolean;
 }
 
 export default function AstroProfileSelector({
@@ -33,15 +35,27 @@ export default function AstroProfileSelector({
   onChange,
   label = "Selecionar pessoa:",
   refreshKey = 0,
+  showUpsellBanner = false,
 }: AstroProfileSelectorProps) {
   const [profiles, setProfiles] = useState<AstroProfileItem[]>([]);
+  const [allowMultiple, setAllowMultiple] = useState<boolean | null>(null);
+  const [upsellUrl, setUpsellUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     (async () => {
       try {
-        const res = await api.get<{ profiles?: AstroProfileItem[] }>("/members/profiles");
-        if (active && Array.isArray(res?.profiles)) {
+        const res = await api.get<{
+          allow_multiple_profiles?: boolean;
+          upsell_url?: string | null;
+          profiles?: AstroProfileItem[];
+        }>("/members/profiles");
+        if (!active) return;
+        if (typeof res?.allow_multiple_profiles === "boolean") {
+          setAllowMultiple(res.allow_multiple_profiles);
+        }
+        setUpsellUrl((res?.upsell_url || "").trim() || null);
+        if (Array.isArray(res?.profiles)) {
           setProfiles(res.profiles);
         }
       } catch {
@@ -53,7 +67,11 @@ export default function AstroProfileSelector({
     };
   }, [refreshKey]);
 
-  if (profiles.length === 0) return null;
+  const shouldShowBanner = Boolean(showUpsellBanner && allowMultiple === false && upsellUrl);
+
+  if (profiles.length === 0) {
+    return shouldShowBanner ? <MultiProfilesUpsellBanner url={upsellUrl} variant="compact" /> : null;
+  }
 
   const principalLabel = ownerName ? `Meu Perfil (${ownerName.split(" ")[0]})` : "Meu Perfil (Principal)";
 

@@ -219,4 +219,94 @@ Você também pode configurar ou alterar o limite diário e o limite máximo tot
 * **Retorno:** inclui os limites configurados (`request_limit_mode`, `max_total_requests`, `daily_request_limit`), o consumo realizado (`total_used` e `daily_used` no fuso de Brasília) e o modelo de IA ativo.
 
 > ⚠️ **Observação sobre múltiplos perfis em usuário já cadastrado:**
-> O envio de `allow_multiple_profiles` e `max_extra_profiles` via `X-API-Key` funciona na criação do convite (`POST /admin/invites`). Para alterar essa permissão em um usuário já existente, o endpoint atual é `PUT /admin/users/{user_id}` usando autenticação `Authorization: Bearer <TOKEN_JWT_ADMIN>`.
+> O envio de `allow_multiple_profiles` e `max_extra_profiles` via `X-API-Key` funciona na criação do convite (`POST /admin/invites`) e também na atualização pelo token (`PATCH /admin/invites/{token}`, inclusive se o aluno já tiver concluído o cadastro). Para editar diretamente por ID de usuário sem token de convite, o endpoint do painel é `PUT /admin/users/{user_id}` com `Authorization: Bearer <TOKEN_JWT_ADMIN>`.
+
+---
+
+## 🔄 6. Consultar e Atualizar Convite pelo Token (Order Bump / Upsell)
+
+Use estes endpoints quando o cliente compra o produto principal e, segundos ou minutos depois, compra um **Order Bump** ou **Upsell** (sem precisar gerar um segundo link).
+
+### 6.1 Consultar Status do Convite (`GET /admin/invites/{token}`)
+
+* **Método:** `GET`
+* **URL:** `https://api.bussolaastrologica.com.br/admin/invites/{token}`
+* **Header:** `X-API-Key: <SUA_EXTERNAL_API_KEY>` (ou Bearer JWT de Admin)
+
+```bash
+curl -X GET "https://SUA_API/admin/invites/SEU_TOKEN_AQUI" \
+  -H "X-API-Key: <SUA_EXTERNAL_API_KEY>"
+```
+
+**Resposta (`200 OK`):**
+```json
+{
+  "id": "e8a9f24b-32c1-4b10-8b9a-112233445566",
+  "token": "SEU_TOKEN_AQUI",
+  "invite_path": "/cadastro?token=SEU_TOKEN_AQUI",
+  "invite_url": "https://bussolaastrologica.com.br/cadastro?token=SEU_TOKEN_AQUI",
+  "role": "client",
+  "role_label": "Aluno",
+  "validity_type": "never",
+  "expires_at": null,
+  "status": "active",
+  "is_used": false,
+  "used_at": null,
+  "used_by_id": null,
+  "allow_multiple_profiles": false,
+  "max_extra_profiles": null,
+  "access_days": 365,
+  "request_limit_mode": "quota_then_daily",
+  "max_total_requests": 300,
+  "daily_request_limit": 5,
+  "created_at": "2026-11-25T14:00:00Z"
+}
+```
+*(Se o token não existir, retorna `404 Not Found`.)*
+
+---
+
+### 6.2 Atualizar Convite ou Conta Já Criada (`PATCH /admin/invites/{token}`)
+
+* **Método:** `PATCH` (também aceita `PUT`)
+* **URL:** `https://api.bussolaastrologica.com.br/admin/invites/{token}`
+* **Header:** `X-API-Key: <SUA_EXTERNAL_API_KEY>`
+
+**Regras automáticas:**
+1. **Convite ainda não usado (`is_used == false`):** atualiza o registro `UserInvite` (`"applied_to": "invite"`). Quando o aluno abrir o **mesmo link**, a conta já nasce com os benefícios liberados.
+2. **Convite já usado (`is_used == true`):** localiza a conta pelo **`used_by_id`** salvo no convite (usando `email` do body apenas como fallback caso `used_by_id` seja nulo) e aplica as permissões diretamente no usuário (`"applied_to": "user"`), mantendo o convite sincronizado.
+3. **Proteção `upgrade_only: true`:** evita rebaixamento caso o webhook do Order Bump chegue antes do Produto Principal — nunca desativa `allow_multiple_profiles: true` e mantém sempre o maior benefício numérico (`null` = ilimitado/vitalício vence qualquer valor numérico).
+
+```bash
+curl -X PATCH "https://SUA_API/admin/invites/SEU_TOKEN_AQUI" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: <SUA_EXTERNAL_API_KEY>" \
+  -d '{
+    "allow_multiple_profiles": true,
+    "max_extra_profiles": 5,
+    "access_days": 365,
+    "request_limit_mode": "quota_then_daily",
+    "max_total_requests": 300,
+    "daily_request_limit": 5,
+    "email": "cliente@exemplo.com",
+    "upgrade_only": true
+  }'
+```
+
+**Resposta (`200 OK`):**
+```json
+{
+  "token": "SEU_TOKEN_AQUI",
+  "invite_url": "https://bussolaastrologica.com.br/cadastro?token=SEU_TOKEN_AQUI",
+  "is_used": true,
+  "used_by_id": "11223344-5566-7788-99aa-bbccddeeff00",
+  "applied_to": "user",
+  "allow_multiple_profiles": true,
+  "max_extra_profiles": 5,
+  "access_days": 365,
+  "request_limit_mode": "quota_then_daily",
+  "max_total_requests": 300,
+  "daily_request_limit": 5,
+  "access_expires_at": "2027-11-25T17:00:00Z"
+}
+```

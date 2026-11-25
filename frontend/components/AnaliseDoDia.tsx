@@ -266,7 +266,7 @@ export default function AnaliseDoDia({
         </div>
 
         {/* Datas */}
-        <div className="mt-4"><AstroProfileSelector ownerName={nome} selectedProfileId={selectedProfileId} onChange={(id) => setSelectedProfileId(id)} label="Gerar leitura para:" /></div>
+        <div className="mt-4"><AstroProfileSelector ownerName={nome} selectedProfileId={selectedProfileId} onChange={(id) => setSelectedProfileId(id)} label="Gerar leitura para:" showUpsellBanner /></div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
           <div className={modo === "dia" ? "sm:col-span-2" : ""}>
             <label
